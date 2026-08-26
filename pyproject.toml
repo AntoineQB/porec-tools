@@ -23,6 +23,7 @@ dev = ["pytest>=7", "pytest-cov", "flake8"]
 
 [project.scripts]
 pore-c-aqb = "pore_c_aqb.cli:main"
+pore-c-aqb-junctions = "pore_c_aqb.junctions:main"
 
 [project.urls]
 Homepage = "https://github.com/AQB/wf-pore-c_AQB"

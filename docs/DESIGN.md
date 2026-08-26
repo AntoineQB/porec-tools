@@ -103,8 +103,24 @@ It is copied **unchanged** into `_vendored.py`, with attribution. Any
 "improvement" would break the byte-identity guarantee, which
 `tests/test_equivalence.py` enforces by diffing against the real upstream tool.
 
-Validated on 4,227 real PacBio reads: 65,456 monomers, **zero differing
-records**, including 51,332 carrying `MM` tags.
+Validated against the real tool in the wf-pore-c container (pore-c-py 2.0.6)
+on 16,758 real PacBio reads: 259,214 monomers, 203,342 of them carrying
+base-modification tags, **zero differences on every field and every tag,
+value types included**.
+
+Two traps here, both hit during development:
+
+* Compare against the **right version**. The standalone `ontresearch/pore-c-py`
+  image is a later 2.1.x that writes `ML` as a uint8 array and adds `MN`;
+  2.0.6 writes `ML` as a string and has no `MN`. Diffing against 2.1.x
+  produced three "defects" that were nothing of the sort. wf-pore-c ships
+  2.0.6, so 2.0.6 is what this tracks.
+* Compare **everything**. The first version of the comparison listed the tags
+  it cared about (`MI`, `Xc`, `MM`, `ML`) and ran on synthetic reads carrying
+  none of them, so it would have passed with the mod-base handling entirely
+  broken. It now compares every tag *and its value type*, on reads that
+  actually carry `MM`/`ML`. Deliberately writing `ML` as a string makes three
+  tests fail, which is the property a test of this kind needs.
 
 ---
 
@@ -127,37 +143,75 @@ Also handled at resolution time:
 
 ---
 
-## 5. Per-enzyme statistics
+## 5. Per-enzyme statistics, and what they are not
 
 Not decoration. The dataset that motivated this tool had been digested with
 DpnII alone, while a fifth of its ligation junctions sat on `CATG`. Finding
 that out required a bespoke junction analysis after the fact.
 
-`DigestStats` makes it a line of routine output:
+`DigestStats` makes the per-enzyme contribution a line of routine output:
 
 ```
-  DpnII        GATC             61,229 cuts ( 39.1%)
-  NlaIII       CATG             95,424 cuts ( 61.0%)
-  HindIII      AAGCTT                0 cuts (  0.0%)   <-- no sites found, check the protocol
+  enzyme   site    sites found  % of cuts  1 per (observed)  1 per (chance)
+  DpnII    GATC         14,721      37.5%            357 bp          256 bp
+  NlaIII   CATG         23,104      58.8%            227 bp          256 bp
+  HindIII  AAGCTT        1,497       3.8%          3,507 bp        4,096 bp
 ```
 
-An enzyme that failed in the reaction, or was named by mistake, is visible in
-the first minute rather than three analysis steps later.
+### The mistake this section exists to record
+
+A pre-release version labelled that column **cuts**, and the caveat in the
+module docstring called it a way to answer "did this enzyme actually cut?".
+Both were wrong, and dangerously so. On the very run above it printed:
+
+```
+  HindIII      AAGCTT            1,497 cuts (  9.2%)
+```
+
+HindIII did not cut this library — junction analysis puts `AAGCTT` *below*
+background at ligation junctions. What the number counts is occurrences of the
+motif in the reads, and `AAGCTT` occurs every ~4 kb in human DNA no matter what
+was in the tube. A user reading "9.2% cuts" would conclude the enzyme worked.
+That is the opposite of the truth, produced by the tool's own summary line.
+
+Two things were changed:
+
+1. **The column says `sites found`,** and the chance rate is printed beside the
+   observed one so the reader can see they match. A closing note states that
+   the number is not proof of cutting.
+2. **The real test ships as a second command,** `pore-c-aqb-junctions`, which
+   measures motif enrichment at ligation junctions against a random background
+   on the same chromosomes. It needs alignments, which is exactly why the
+   digest cannot answer the question.
+
+What the digest table legitimately gives you: confirmation the enzyme was
+applied, a typo check (`0 sites` warns), and the share of fragmentation each
+enzyme contributes — the number you need to decide whether a second enzyme
+earned its place.
+
+### A diagnostic that was tried and rejected
+
+Before settling on this, the read termini were tried: a concatemer's outer ends
+are genuine cuts, so a read starting on an enzyme's cut should begin with
+`site[fst5:]`. On 1,036 real reads it returned **0.0% for every enzyme,
+including DpnII**, which certainly cut — PacBio reads carry adapters and
+barcodes at their ends, so the termini are not cut sites. Recording it here so
+it is not re-attempted.
 
 ---
 
 ## 6. Performance
 
-4,227 real 3C reads, mean 4.4 kb, single core:
+16,758 real 3C reads, mean 4.4 kb, single core, second run of two:
 
 | | time | throughput |
 |---|---:|---:|
-| upstream `pore-c-py digest DpnII` | ~10.8 s | 390 reads/s |
-| `pore-c-aqb digest DpnII` | ~10.0 s | 430 reads/s |
-| `pore-c-aqb digest DpnII,NlaIII` | ~15.0 s | 282 reads/s |
+| upstream `pore-c-py digest DpnII` | 42.3 s | 395 reads/s |
+| `pore-c-aqb digest DpnII` | 39.9 s | 420 reads/s |
+| `pore-c-aqb digest DpnII,NlaIII` | 60.8 s | 275 reads/s |
 
 No regression. The second enzyme costs ~50%, split between the extra search and
-a 2.5× larger output to write.
+a 2.4× larger output to write (259,214 → 634,479 monomers).
 
 `--threads` only affects BAM compression (14.1 s vs 15.0 s at 4 threads); the
 work is dominated by MM/ML recomputation, which is per-monomer and vendored.

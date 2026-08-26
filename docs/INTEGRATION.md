@@ -20,8 +20,12 @@ pore-c-aqb digest DpnII,NlaIII reads.bam \
     --threads 8
 ```
 
-Nothing in the workflow is touched, and `digest_stats.tsv` tells you straight
-away whether both enzymes actually cut.
+Add `--max_monomers 250 --excluded_list dropped.txt` to mirror what the
+workflow does with over-digested reads.
+
+Nothing in the workflow is touched, and `digest_stats.tsv` records how many
+sites each enzyme had and how much of the fragmentation it accounts for. (It
+does *not* tell you whether an enzyme cut — see the last section.)
 
 ---
 
@@ -37,9 +41,23 @@ git apply /path/to/wf-pore-c_AQB/patches/wf-pore-c-multicutter.patch
 
 It does two things:
 
-1. swaps `pore-c-py digest` for `pore-c-aqb digest` in `modules/local/pore-c.nf`;
-2. drops the single-value validation on `--cutter` in `nextflow_schema.json`,
-   so `--cutter 'DpnII,NlaIII'` is accepted.
+1. swaps `pore-c-py digest` for `pore-c-aqb digest` in `modules/local/pore-c.nf`
+   — at **both** call sites;
+2. documents the comma-separated form in `nextflow_schema.json`.
+
+The two call sites matter. `digest_align_annotate` branches on `chunk_size`,
+and the two branches order the positionals differently:
+
+```bash
+# chunked: enzyme only, BAM arrives on stdin
+bamindex fetch --chunk=N concatemers.bam | pore-c-py digest "${meta.cutter}" ...
+# not chunked: input file first, enzyme second
+pore-c-py digest "concatemers.bam" "${meta.cutter}" ...
+```
+
+`pore-c-aqb` accepts either order, and implements the `--max_monomers` and
+`--excluded_list` options both branches pass. Patching only one branch, or
+dropping those options, leaves the workflow broken on one of its two paths.
 
 The container must then contain the package — see below.
 
@@ -73,17 +91,22 @@ same input.
 
 ```bash
 pore-c-aqb digest DpnII,NlaIII --dry-run
-# DpnII    GATC    fst5=0    palindromic=True
-# NlaIII   CATG    fst5=4    palindromic=True
 ```
 
-**After the digest**, read the per-enzyme report. An enzyme at `0 cuts` either
-was not in the reaction, failed, or is a typo:
+```
+Enzymes resolved from 'DpnII,NlaIII':
+  enzyme  site  cut (both strands)  sticky end  1 site per  recognition
+  DpnII   GATC  N^GATC_N            5' GATC     256 bp      palindromic
+  NlaIII  CATG  _CATG^              3' CATG     256 bp      palindromic
+```
 
-```
-  DpnII        GATC             61,229 cuts ( 39.1%)
-  NlaIII       CATG             95,424 cuts ( 61.0%)
-```
+Check the site and the cut position against your protocol here — it costs a
+second, and a wrong enzyme wastes the whole run.
+
+**After the digest**, read the per-enzyme table. `0 sites` for an enzyme means
+the name is wrong or the reads are not from that run, and is flagged as a
+warning. A large count means only that the motif is present, which it always
+is — see the caveat below.
 
 **Provenance** is recorded in the BAM header:
 
@@ -96,21 +119,41 @@ samtools view -H monomers.ns.bam | grep pore-c-aqb
 
 ## Which enzymes did my library actually use?
 
-If the protocol is unclear, the data can be asked directly. Take the junctions
-between consecutive aligned monomers that jump more than 1 kb, and look at what
-motif sits at the boundary:
+The digest report cannot answer this, and does not pretend to: it counts sites
+present in the reads, and every motif is present by chance. The test that does
+work needs **aligned** monomers, and ships with this package:
 
 ```bash
-samtools view monomers.ns.bam | python3 - <<'PY'
-# see the project this tool came from for a fuller version;
-# the principle: extract junction boundaries, then compare motif frequency
-# at those positions against random positions on the same chromosomes.
-PY
+pore-c-aqb-junctions monomers.aligned.ns.bam hg38.fa \
+    --enzymes DpnII,NlaIII,HindIII,HinfI
 ```
 
-On the dataset this tool was written for, that analysis gave `GATC` at 86% of
-junctions (27× above random) and `CATG` at 21% (16× above random), while
-`AAGCTT` sat at 0.1% — below background. The protocol notes said HindIII; the
-data said NlaIII.
+It takes the boundaries between consecutive monomers that jump more than 1 kb —
+genuine ligation junctions — and asks how often each enzyme's site sits there,
+against random positions on the same chromosomes:
 
-Doing this **before** the digest saves re-running it.
+```
+30,000 junction boundaries (MAPQ >= 20, jump > 1,000 bp)
+
+  enzyme     site      at junctions   at random  enrichment   verdict
+  DpnII      GATC             39.5%        1.3%       29.5x   yes, main enzyme
+  NlaIII     CATG             10.3%        2.3%        4.4x   yes, secondary
+  HindIII    AAGCTT            0.0%        0.1%        0.1x   no
+  HinfI      GANTC             1.3%        1.5%        0.9x   no
+```
+
+That is the run this tool was written for. The protocol notes said HindIII;
+`AAGCTT` sits **below** background at junctions, so HindIII never cut. The
+second enzyme was NlaIII. Same verdicts on the second sample of the pair.
+
+Notes on reading it:
+
+- **Use the enrichment column, not the percentages.** Aligners soft-clip a few
+  bases at monomer ends, so the boundary drifts off the true cut and the
+  absolute rates understate. `--tol 10` recovers DpnII to ~79% but inflates the
+  random background too, dropping every enrichment.
+- The outer ends of a concatemer are ignored — they carry adapters, not cut
+  sites. (A diagnostic based on read termini was tried first and returns 0% for
+  every enzyme, including ones that certainly cut, for exactly this reason.)
+- Running this **before** the digest saves re-running it. It only needs an
+  aligned BAM from any earlier single-enzyme run.

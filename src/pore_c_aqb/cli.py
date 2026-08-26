@@ -11,6 +11,7 @@ names, so an existing wf-pore-c invocation keeps working unchanged:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import sys
 from pathlib import Path
@@ -23,6 +24,12 @@ from pore_c_aqb.enzymes import (
     EnzymeSpecError,
     describe_enzymes,
     resolve_enzymes,
+)
+from pore_c_aqb.report import (
+    describe_cut,
+    describe_overhang,
+    enzyme_table,
+    expected_site_spacing,
 )
 
 PROG = "pore-c-aqb"
@@ -55,8 +62,11 @@ def _build_parser() -> argparse.ArgumentParser:
               "Restriction module."),
     )
     d.add_argument(
-        "input", nargs="?", default="-",
-        help="Unaligned BAM of concatemers ('-' for stdin).")
+        "input", nargs="*", default=None,
+        help=("Unaligned BAM(s) of concatemers, or a directory, or '-' for "
+              "stdin. wf-pore-c calls the digest with the file before the "
+              "enzyme in one of its two branches, so that order is accepted "
+              "too."))
     d.add_argument(
         "--output", default="-",
         help="Output unaligned BAM ('-' for stdout).")
@@ -68,17 +78,34 @@ def _build_parser() -> argparse.ArgumentParser:
         "--remove_tags", nargs="+", default=None,
         help="Additional SAM tags to strip from the output.")
     d.add_argument(
-        "--max_reads", type=int, default=0,
-        help="Stop after this many concatemers (0 = all). Useful for testing.")
+        "--max_reads", type=int, default=None,
+        help="Take only the first N concatemers. Useful for testing.")
+    d.add_argument(
+        "--max_monomers", type=int, default=None,
+        help=("Drop a concatemer cut into more than this many monomers. "
+              "The whole read is excluded, not trimmed."))
+    d.add_argument(
+        "--excluded_list", type=Path, default=None,
+        help="Write the name of each excluded read to this file.")
+    d.add_argument(
+        "--excluded_bam", type=Path, default=None,
+        help="Write each excluded read to this BAM.")
+    d.add_argument(
+        "--recursive", action="store_true",
+        help="If INPUT is a directory, search it recursively.")
+    d.add_argument(
+        "--glob", default="*.bam",
+        help="If INPUT is a directory, match files with this glob.")
     d.add_argument(
         "--threads", type=int, default=1,
         help="Compute threads for BAM compression.")
     d.add_argument(
         "--stats", type=Path, default=None,
-        help="Write the per-enzyme cut report to this file as TSV.")
+        help="Write the per-enzyme site report to this file as TSV.")
     d.add_argument(
         "--dry-run", action="store_true",
-        help="Resolve and print the enzymes, then exit without reading input.")
+        help=("Print what each enzyme will do, then exit without reading "
+              "input. Use it to check the enzymes before a long run."))
 
     verb = d.add_mutually_exclusive_group()
     verb.add_argument(
@@ -105,6 +132,41 @@ def _setup_logging(level: int, logfile: Path | None) -> None:
     )
 
 
+def split_positionals(enzyme: str, inputs: list[str]) -> tuple[str, list[str]]:
+    """Work out which positional is the enzyme.
+
+    wf-pore-c calls the digest both ways round: ``digest "$cutter"`` reading
+    stdin in its chunked branch, and ``digest concatemers.bam "$cutter"`` in
+    the other. Upstream's parser puts the enzyme last; this one puts it first
+    so that ``digest DpnII,NlaIII reads.bam`` reads naturally. Accepting both
+    costs one check and avoids a confusing failure.
+    """
+    inputs = list(inputs or [])
+    if inputs and Path(enzyme).exists() and not Path(inputs[-1]).exists():
+        # first positional is a real file, last one is not: enzyme is last
+        return inputs[-1], [enzyme] + inputs[:-1]
+    return enzyme, inputs
+
+
+def resolve_inputs(inputs: list[str], glob: str, recursive: bool) -> list[str]:
+    """Expand directories, and default to stdin when nothing was given."""
+    if not inputs:
+        return ["-"]
+    found: list[str] = []
+    for item in inputs:
+        path = Path(item)
+        if item != "-" and path.is_dir():
+            matches = sorted(
+                path.rglob(glob) if recursive else path.glob(glob))
+            if not matches:
+                raise SystemExit(
+                    f"No file matching {glob!r} in directory {item}.")
+            found.extend(str(m) for m in matches)
+        else:
+            found.append(item)
+    return found
+
+
 def _open_input(path: str, header_path: Path | None):
     if path == "-":
         if header_path is None:
@@ -113,7 +175,12 @@ def _open_input(path: str, header_path: Path | None):
                 "header that can be copied to the output."
             )
         return pysam.AlignmentFile("-", "rb", check_sq=False)
-    return pysam.AlignmentFile(path, "rb", check_sq=False)
+    if not Path(path).exists():
+        raise SystemExit(f"Input file not found: {path}")
+    try:
+        return pysam.AlignmentFile(path, "rb", check_sq=False)
+    except (OSError, ValueError) as exc:
+        raise SystemExit(f"Cannot read {path} as a BAM: {exc}")
 
 
 def _output_header(infile, header_path: Path | None, enzymes) -> dict:
@@ -140,44 +207,85 @@ def _write_stats(path: Path, enzymes, stats: DigestStats) -> None:
         fh.write(f"enzymes\t{describe_enzymes(enzymes)}\n")
         fh.write(f"concatemers\t{stats.n_concatemers}\n")
         fh.write(f"monomers\t{stats.n_monomers}\n")
+        fh.write(f"excluded_concatemers\t{stats.n_excluded}\n")
         fh.write(f"cut_points\t{stats.n_cut_points}\n")
         fh.write(f"shared_cut_points\t{stats.n_shared_cut_points}\n")
+        fh.write(f"bases_read\t{stats.n_bases}\n")
         for enz in enzymes:
-            n = stats.cuts_per_enzyme.get(enz.name, 0)
-            fh.write(f"cuts_{enz.name}\t{n}\n")
+            n = stats.sites_per_enzyme.get(enz.name, 0)
+            fh.write(f"site_{enz.name}\t{enz.site}\n")
+            fh.write(f"cut_{enz.name}\t{describe_cut(enz)}\n")
+            fh.write(f"overhang_{enz.name}\t{describe_overhang(enz)}\n")
+            fh.write(f"sites_found_{enz.name}\t{n}\n")
+            fh.write(f"pct_of_cut_points_{enz.name}\t"
+                     f"{100.0 * n / stats.n_cut_points:.2f}\n"
+                     if stats.n_cut_points else
+                     f"pct_of_cut_points_{enz.name}\t0.00\n")
+            obs = stats.n_bases / n if n else 0
+            fh.write(f"observed_spacing_bp_{enz.name}\t{obs:.0f}\n")
+            fh.write(f"chance_spacing_bp_{enz.name}\t"
+                     f"{expected_site_spacing(enz.site):.0f}\n")
 
 
 def run_digest(args) -> int:
+    enzyme_spec, inputs = split_positionals(args.enzyme, args.input)
     try:
-        enzymes = resolve_enzymes(args.enzyme)
+        enzymes = resolve_enzymes(enzyme_spec)
     except EnzymeSpecError as exc:
         logger.error("%s", exc)
         return 2
 
-    logger.info("Digesting with %s", describe_enzymes(enzymes))
     if args.dry_run:
-        for enz in enzymes:
-            print(f"{enz.name}\t{enz.site}\tfst5={enz.fst5}\t"
-                  f"palindromic={enz.is_palindromic}")
+        # stdout, not the logger: --dry-run must still print under --quiet,
+        # and its output is meant to be readable and pipeable.
+        print(f"Enzymes resolved from {enzyme_spec!r}:")
+        for line in enzyme_table(enzymes):
+            print(line)
+        print("Dry run: no data read. Remove --dry-run to digest.")
         return 0
 
+    inputs = resolve_inputs(inputs, args.glob, args.recursive)
+    logger.info("Digesting with %s", describe_enzymes(enzymes))
+    for line in enzyme_table(enzymes):
+        logger.info("%s", line)
+
     stats = DigestStats()
-    infile = _open_input(args.input, args.header)
-    try:
-        header = _output_header(infile, args.header, enzymes)
-        mode = "wb" if args.output != "-" else "wb0"
-        with pysam.AlignmentFile(
-            args.output, mode, header=header,
-            threads=max(1, args.threads),
-        ) as out:
-            reads = get_concatemer_seqs(
-                infile, enzymes, remove_tags=args.remove_tags, stats=stats)
-            for read in reads:
-                if args.max_reads and stats.n_concatemers > args.max_reads:
-                    break
+    mode = "wb" if args.output != "-" else "wb0"
+    remaining = args.max_reads
+
+    with contextlib.ExitStack() as stack:
+        # stdin can only be opened once: read the header from this very handle
+        # and keep it open, rather than reopening the stream later
+        first = stack.enter_context(_open_input(inputs[0], args.header))
+        header = _output_header(first, args.header, enzymes)
+
+        out = stack.enter_context(pysam.AlignmentFile(
+            args.output, mode, header=header, threads=max(1, args.threads)))
+        excluded_list = (stack.enter_context(open(args.excluded_list, "w"))
+                         if args.excluded_list else None)
+        excluded_bam = (stack.enter_context(pysam.AlignmentFile(
+            str(args.excluded_bam), "wb", header=header,
+            threads=max(1, args.threads))) if args.excluded_bam else None)
+
+        def on_excluded(read):
+            if excluded_list is not None:
+                excluded_list.write(f"{read.query_name}\n")
+            if excluded_bam is not None:
+                excluded_bam.write(read)
+
+        for index, path in enumerate(inputs):
+            if remaining is not None and remaining <= 0:
+                break
+            infile = first if index == 0 else stack.enter_context(
+                _open_input(path, args.header))
+            before = stats.n_concatemers
+            for read in get_concatemer_seqs(
+                    infile, enzymes, remove_tags=args.remove_tags, stats=stats,
+                    max_monomers=args.max_monomers, on_excluded=on_excluded,
+                    max_reads=remaining):
                 out.write(read)
-    finally:
-        infile.close()
+            if remaining is not None:
+                remaining -= stats.n_concatemers - before
 
     for line in stats.summary_lines(enzymes):
         logger.info("%s", line)

@@ -6,6 +6,11 @@ This work is derived from pore-c-py 2.0.6
   Copyright (c) Oxford Nanopore Technologies PLC.
   Licensed under the Oxford Nanopore Technologies PLC Public License v1.0.
 
+2.0.6 is the version shipped inside the wf-pore-c container, which is what
+this tool is a drop-in for. Later 2.1.x releases changed the base-modification
+tags (ML became a uint8 array, MN was added); the vendored code and the
+equivalence tests deliberately track 2.0.6, not those.
+
 The same licence applies to this derivative work; see LICENSE.
 Note that it restricts use to "Research Purposes" as defined in clause 1.10.
 
@@ -45,13 +50,36 @@ Changes made
    close-match suggestions on typos. Isoschizomers (DpnII/MboI) are collapsed.
    Enzymes that cut twice, or have no defined cut position, are rejected.
 
-4. Per-enzyme cut statistics  [DigestStats]
-   Reports how many cuts each enzyme contributed, so a failed enzyme is visible
-   immediately. Written to stderr and, with --stats, to TSV.
+4. Per-enzyme site statistics  [DigestStats, src/pore_c_aqb/report.py, new]
+   Reports how many recognition sites each enzyme has in the reads, its share
+   of the cut points, and the observed site spacing beside the spacing expected
+   by chance. Written to stderr and, with --stats, to TSV. The report states
+   explicitly that a site count is not evidence an enzyme cut.
 
-5. Provenance
+5. Enzyme table before the digest  [src/pore_c_aqb/report.py, new]
+   Site, cut position drawn on both strands, sticky end and expected site
+   spacing, shown before any data is read and on its own with --dry-run.
+
+6. Junction motif analysis  [src/pore_c_aqb/junctions.py, new]
+   Standalone command `pore-c-aqb-junctions`. Measures each enzyme's motif
+   enrichment at ligation junctions in aligned monomers against a random
+   background, which is the test of whether an enzyme actually cut. Not derived
+   from upstream code.
+
+7. Upstream options implemented here
+   --max_monomers, --excluded_list, --excluded_bam (exclusion of
+   over-digested concatemers), --recursive and --glob (directory input), and
+   both positional orders for INPUT and ENZYME. wf-pore-c passes these, and
+   calls the digest with the enzyme first in one branch and the input file
+   first in the other, so both are accepted.
+
+   --max_monomers follows the semantics upstream introduced after 2.0.6: a
+   concatemer cut into more pieces than the limit is dropped whole rather
+   than trimmed.
+
+8. Provenance
    A @PG line recording the tool, version, command line and enzyme list is
    added to the output BAM header.
 
-6. Command-line interface  [src/pore_c_aqb/cli.py, new]
+9. Command-line interface  [src/pore_c_aqb/cli.py, new]
    Argument-compatible with `pore-c-py digest`; adds --stats and --dry-run.

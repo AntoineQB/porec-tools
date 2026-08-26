@@ -112,21 +112,43 @@ def test_stats_count_each_enzyme(spaced_sites):
     stats = DigestStats()
     enzymes = resolve_enzymes("DpnII,NlaIII")
     find_cut_points(spaced_sites, enzymes, stats)
-    assert stats.cuts_per_enzyme["DpnII"] >= 1
-    assert stats.cuts_per_enzyme["NlaIII"] >= 1
+    assert stats.sites_per_enzyme["DpnII"] >= 1
+    assert stats.sites_per_enzyme["NlaIII"] >= 1
     assert stats.n_cut_points >= 2
 
 
-def test_stats_flag_an_enzyme_that_never_cuts():
-    """The reason this tool exists: telling a working enzyme from a dud."""
+def test_stats_flag_an_enzyme_with_no_site_at_all():
+    """Zero sites means the enzyme name is wrong or the data is not this run."""
     seq = "GATC".join(["TTTT"] * 20)      # DpnII sites only, no AAGCTT
     stats = DigestStats()
+    stats.n_concatemers = 1
+    stats.n_bases = len(seq)
     enzymes = resolve_enzymes("DpnII,HindIII")
     find_cut_points(seq, enzymes, stats)
-    assert stats.cuts_per_enzyme["DpnII"] > 0
-    assert stats.cuts_per_enzyme.get("HindIII", 0) == 0
+    assert stats.sites_per_enzyme["DpnII"] > 0
+    assert stats.sites_per_enzyme.get("HindIII", 0) == 0
     report = "\n".join(stats.summary_lines(enzymes))
-    assert "no sites found" in report
+    assert "WARNING" in report and "HindIII" in report
+
+
+def test_report_never_claims_an_enzyme_cut():
+    """The count is sites present in the reads, not proof of cutting.
+
+    Overclaiming here would be worse than saying nothing: a user reading
+    "1,497 cuts" for an enzyme that failed draws exactly the wrong conclusion.
+    """
+    seq = "GATC".join(["TTTTAAGCTTTTTT"] * 20)   # both motifs present
+    stats = DigestStats()
+    stats.n_concatemers = 1
+    stats.n_bases = len(seq)
+    enzymes = resolve_enzymes("DpnII,HindIII")
+    find_cut_points(seq, enzymes, stats)
+    report = "\n".join(stats.summary_lines(enzymes))
+    assert "sites found" in report
+    assert "cuts (" not in report, "must not label site counts as cuts"
+    assert "not proof an enzyme cut" in report
+    assert "means nothing on its own" in report
+    assert "ALIGNED" in report, "must point at the test that actually works"
 
 
 def test_shared_cut_point_counted_once():
@@ -157,3 +179,21 @@ def test_random_sequences_tile_exactly(seed):
     reads = list(digest_sequence(
         make_read("r", seq), resolve_enzymes("DpnII,NlaIII")))
     assert "".join(r.query_sequence for r in reads) == seq
+
+
+def test_expected_spacing_matches_site_complexity():
+    from pore_c_aqb.report import expected_site_spacing
+    assert expected_site_spacing("GATC") == 256        # 4^4
+    assert expected_site_spacing("AAGCTT") == 4096     # 4^6
+    assert expected_site_spacing("GANTC") == 256       # N is free
+    assert expected_site_spacing("CCWGG") == 512       # W allows 2 of 4
+
+
+def test_observed_spacing_is_reported(spaced_sites):
+    stats = DigestStats()
+    stats.n_concatemers = 1
+    stats.n_bases = len(spaced_sites)
+    enzymes = resolve_enzymes("DpnII,NlaIII")
+    find_cut_points(spaced_sites, enzymes, stats)
+    report = "\n".join(stats.summary_lines(enzymes))
+    assert "1 per (observed)" in report and "1 per (chance)" in report

@@ -11,9 +11,16 @@ Two levels of checking:
 
 * :func:`test_matches_reference_implementation` re-implements upstream's
   algorithm inline (it is short) and compares record by record. Always runs.
-* :func:`test_matches_upstream_container` runs the *real* pore-c-py inside its
-  published Docker image and diffs the BAMs. Skipped when Docker or the image
-  is unavailable, so CI stays green on machines without it.
+* :func:`test_matches_upstream_container` runs the *real* pore-c-py inside the
+  published wf-pore-c image and diffs the BAMs. Skipped when Docker or the
+  image is unavailable, so CI stays green on machines without it.
+
+The image is deliberately ``wf-pore-c``, which carries pore-c-py **2.0.6** —
+the version the workflow actually runs, and the one ``_vendored.py`` was taken
+from. The standalone ``ontresearch/pore-c-py`` image is a later 2.1.x that
+changed the mod-base tags (``ML`` became a uint8 array and ``MN`` was added);
+comparing against it reports differences that are upstream's version bump, not
+a defect here.
 """
 from __future__ import annotations
 
@@ -91,6 +98,42 @@ def _comparable(read):
     )
 
 
+def _every_field(read):
+    """Everything, including tag value types.
+
+    ``_comparable`` names the fields we care about; this one takes no view and
+    so catches a divergence in a tag nobody thought to list - including the
+    *type* a tag is written with, which is how an ML written as a string
+    instead of a uint8 array would show up.
+    """
+    return (
+        read.query_name,
+        read.query_sequence,
+        None if read.query_qualities is None
+        else pysam.qualities_to_qualitystring(read.query_qualities),
+        read.flag,
+        sorted((t[0], repr(t[1]), t[2])
+               for t in read.get_tags(with_value_type=True)),
+    )
+
+
+def methylated_read(name, seq):
+    """A read carrying MM/ML tags, so mod-base handling is exercised.
+
+    Without this the container comparison runs on tag-free synthetic reads and
+    would pass even if the MM/ML recomputation were completely broken.
+    """
+    positions = [i for i, b in enumerate(seq) if b == "C"]
+    if not positions:
+        raise ValueError("sequence has no C to modify")
+    deltas = ",".join("0" for _ in positions)
+    read = make_read(name, seq)
+    read.set_tag("MM", f"C+m,{deltas};", "Z")
+    read.set_tag("ML", array.array("B", [(7 * i) % 256 for i in
+                                         range(len(positions))]))
+    return read
+
+
 @pytest.mark.parametrize("enzyme", ["DpnII", "NlaIII", "HinfI", "HindIII"])
 @pytest.mark.parametrize("seed", range(6))
 def test_matches_reference_implementation(enzyme, seed):
@@ -156,6 +199,49 @@ def _docker_available() -> bool:
         return True
     except Exception:
         return False
+
+
+def _run_upstream(tmp_path: Path, in_bam: str, enzyme: str) -> Path:
+    theirs = tmp_path / "theirs.bam"
+    subprocess.run(
+        ["docker", "run", "--rm", "-v", f"{tmp_path}:/data", UPSTREAM_IMAGE,
+         "bash", "-lc",
+         f"pore-c-py digest /data/{Path(in_bam).name} {enzyme} "
+         f"--output /data/theirs.bam"],
+        check=True, capture_output=True, timeout=900)
+    return theirs
+
+
+@pytest.mark.skipif(not _docker_available(),
+                    reason="Docker or the upstream wf-pore-c image unavailable")
+@pytest.mark.parametrize("enzyme", ["DpnII", "NlaIII"])
+def test_matches_upstream_container_with_modified_bases(tmp_path: Path, enzyme):
+    """The comparison that matters: real MM/ML tags, every field, every tag.
+
+    MM/ML recomputation is the subtlest part of the digest and the part most
+    likely to drift from upstream, so it is checked against the real tool
+    rather than against our own transcription of it.
+    """
+    reads = [methylated_read(f"read{i}", random_seq(400 + 91 * i, seed=i))
+             for i in range(20)]
+    in_bam = write_bam(tmp_path / "mod.bam", reads)
+
+    ours = tmp_path / "ours.bam"
+    subprocess.run(
+        [sys.executable, "-m", "pore_c_aqb.cli", "digest", enzyme, in_bam,
+         "--output", str(ours), "--quiet"],
+        check=True, capture_output=True)
+    theirs = _run_upstream(tmp_path, in_bam, enzyme)
+
+    with pysam.AlignmentFile(str(ours), "rb", check_sq=False) as a, \
+         pysam.AlignmentFile(str(theirs), "rb", check_sq=False) as b:
+        got = [_every_field(r) for r in a]
+        want = [_every_field(r) for r in b]
+
+    assert len(got) == len(want), "different number of monomers"
+    assert got == want
+    assert any(t[0] == "ML" for row in want for t in row[4]), \
+        "the fixture must actually carry ML tags for this test to mean anything"
 
 
 @pytest.mark.skipif(not _docker_available(),

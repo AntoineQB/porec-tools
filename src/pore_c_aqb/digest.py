@@ -21,6 +21,8 @@ wrong: it would produce overlapping monomer sets rather than one partition.
 from __future__ import annotations
 
 import copy
+import itertools
+import logging
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Iterator, Sequence
@@ -32,49 +34,37 @@ from pore_c_aqb.enzymes import ResolvedEnzyme
 from pore_c_aqb.sites import find_cuts_for_enzyme
 
 __all__ = ["DigestStats", "find_cut_points", "digest_sequence",
-           "get_concatemer_seqs"]
+           "digest_sequence_tagged", "get_concatemer_seqs"]
+
+logger = logging.getLogger("pore-c-aqb")
 
 
 @dataclass
 class DigestStats:
     """Counters gathered while digesting.
 
-    ``cuts_per_enzyme`` answers a question that is otherwise very hard to ask:
-    *did this enzyme actually cut?* A reaction where one enzyme failed produces
-    almost no cuts attributable to it, and that shows up here immediately
-    rather than as a silent loss of contacts downstream.
+    ``sites_per_enzyme`` counts recognition sites **found in the reads**. It
+    confirms each enzyme was applied and shows its share of the fragmentation.
+    It is deliberately not called "cuts": a site occurring in the sequence is
+    not evidence the enzyme cut it, since every motif occurs in genomic DNA by
+    chance. See :mod:`pore_c_aqb.report`.
     """
 
     n_concatemers: int = 0
     n_monomers: int = 0
+    #: concatemers dropped for having more than --max_monomers monomers
+    n_excluded: int = 0
     n_cut_points: int = 0
-    cuts_per_enzyme: Counter = field(default_factory=Counter)
-    #: cut positions found by more than one enzyme, counted once in the digest
+    #: total bases read, used to express site density as "1 per N bp"
+    n_bases: int = 0
+    sites_per_enzyme: Counter = field(default_factory=Counter)
+    #: positions carrying a site for more than one enzyme, cut once
     n_shared_cut_points: int = 0
 
     def summary_lines(self, enzymes: Sequence[ResolvedEnzyme]) -> list[str]:
-        """Human-readable report, one line per enzyme."""
-        out = [
-            f"Digested {self.n_concatemers:,} concatemers into "
-            f"{self.n_monomers:,} monomers "
-            f"({self.n_cut_points:,} cut points)."
-        ]
-        if not self.n_cut_points:
-            return out
-        for enz in enzymes:
-            n = self.cuts_per_enzyme.get(enz.name, 0)
-            pct = 100.0 * n / self.n_cut_points
-            flag = "   <-- no sites found, check the protocol" if n == 0 else ""
-            out.append(
-                f"  {enz.name:<12} {enz.site:<10} {n:>12,} cuts "
-                f"({pct:5.1f}%){flag}"
-            )
-        if self.n_shared_cut_points:
-            out.append(
-                f"  {'(shared)':<12} {'':<10} {self.n_shared_cut_points:>12,} "
-                f"positions cut by more than one enzyme, counted once"
-            )
-        return out
+        """Human-readable report; see :mod:`pore_c_aqb.report`."""
+        from pore_c_aqb.report import format_report
+        return format_report(self, enzymes)
 
 
 def find_cut_points(
@@ -103,8 +93,9 @@ def find_cut_points(
         cuts |= found
 
     if stats is not None:
+        stats.n_bases += len(sequence)
         for name, found in per_enzyme.items():
-            stats.cuts_per_enzyme[name] += len(found)
+            stats.sites_per_enzyme[name] += len(found)
         # a position claimed by k enzymes is counted k times above but once
         # in the digest; record the excess so the report stays honest
         total_claims = sum(len(v) for v in per_enzyme.values())
@@ -115,8 +106,30 @@ def find_cut_points(
 
 
 def digest_sequence(align, enzymes: Sequence[ResolvedEnzyme],
-                    tags_remove=None, stats: DigestStats | None = None):
-    """Split one concatemer into monomers. Mirrors pore-c-py exactly."""
+                    tags_remove=None, stats: DigestStats | None = None,
+                    max_monomers=None):
+    """Monomers of one concatemer.
+
+    A concatemer excluded by ``max_monomers`` yields nothing here; use
+    :func:`digest_sequence_tagged` if you need the excluded read itself.
+    """
+    for is_monomer, read in digest_sequence_tagged(
+            align, enzymes, tags_remove, stats, max_monomers):
+        if is_monomer:
+            yield read
+
+
+def digest_sequence_tagged(align, enzymes: Sequence[ResolvedEnzyme],
+                           tags_remove=None, stats: DigestStats | None = None,
+                           max_monomers=None):
+    """Split one concatemer, yielding ``(is_monomer, read)``.
+
+    Mirrors pore-c-py exactly, with two additions: several enzymes, and the
+    ``max_monomers`` exclusion that upstream added after 2.0.6. A read with
+    more than ``max_monomers`` pieces is almost always a chimera or an
+    over-digested artefact, so upstream drops it whole rather than emitting the
+    pieces; ``(False, original_read)`` is yielded so the caller can record it.
+    """
     # the move tag massively bloats files, and we don't care for
     # it or handle it in trimming, so force its removal by default.
     if tags_remove is None:
@@ -128,6 +141,13 @@ def digest_sequence(align, enzymes: Sequence[ResolvedEnzyme],
     num_digits = len(str(read_length))
     intervals = _vendored.splits_to_intervals(cut_points, read_length)
     num_intervals = len(intervals)
+
+    if max_monomers is not None and num_intervals > max_monomers:
+        # bail out before building monomers that would only be discarded
+        logger.warning(
+            "Dropping read %s, has %d monomers.", concatemer_id, num_intervals)
+        yield False, copy.copy(align)
+        return
 
     for idx, (start, end) in enumerate(intervals):
         read = copy.copy(align)
@@ -157,7 +177,7 @@ def digest_sequence(align, enzymes: Sequence[ResolvedEnzyme],
         _vendored.set_monomer_data(
             read, start, end, read_length, idx, num_intervals)
         read.set_tag(_vendored.CONCATEMER_ID_TAG, concatemer_id, "Z")
-        yield read
+        yield True, read
 
 
 def get_concatemer_seqs(
@@ -165,6 +185,9 @@ def get_concatemer_seqs(
     enzymes: Sequence[ResolvedEnzyme],
     remove_tags=None,
     stats: DigestStats | None = None,
+    max_monomers=None,
+    on_excluded=None,
+    max_reads=None,
 ) -> Iterator:
     """Digest concatemers into unaligned monomers.
 
@@ -172,14 +195,28 @@ def get_concatemer_seqs(
     :param enzymes: enzymes resolved by :func:`pore_c_aqb.enzymes.resolve_enzymes`
     :param remove_tags: additional SAM tags to strip
     :param stats: optional :class:`DigestStats` to accumulate counters into
+    :param max_monomers: drop concatemers cut into more pieces than this
+    :param on_excluded: called with each dropped read, for --excluded_list/bam
+    :param max_reads: read only the first N concatemers
     """
     if stats is None:
         stats = DigestStats()
     tags_remove = {"mv"}
     if remove_tags:
         tags_remove.update(set(remove_tags))
-    for align in input_file.fetch(until_eof=True):
+    stream = input_file.fetch(until_eof=True)
+    if max_reads is not None:
+        # islice so the N+1st concatemer is never consumed or counted, which
+        # is what upstream does and what makes --max_reads N mean exactly N
+        stream = itertools.islice(stream, max_reads)
+    for align in stream:
         stats.n_concatemers += 1
-        for read in digest_sequence(align, enzymes, tags_remove, stats):
-            stats.n_monomers += 1
-            yield read
+        for is_monomer, read in digest_sequence_tagged(
+                align, enzymes, tags_remove, stats, max_monomers):
+            if is_monomer:
+                stats.n_monomers += 1
+                yield read
+            else:
+                stats.n_excluded += 1
+                if on_excluded is not None:
+                    on_excluded(read)

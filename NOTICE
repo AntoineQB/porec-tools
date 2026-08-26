@@ -1,0 +1,57 @@
+wf-pore-c_AQB / pore-c-aqb
+==========================
+
+This work is derived from pore-c-py 2.0.6
+  https://github.com/epi2me-labs/pore-c-py
+  Copyright (c) Oxford Nanopore Technologies PLC.
+  Licensed under the Oxford Nanopore Technologies PLC Public License v1.0.
+
+The same licence applies to this derivative work; see LICENSE.
+Note that it restricts use to "Research Purposes" as defined in clause 1.10.
+
+
+Files taken from upstream
+-------------------------
+src/pore_c_aqb/_vendored.py
+    get_subread_modified_bases()  -- verbatim from pore_c_py/digest.py
+    splits_to_intervals()         -- verbatim from pore_c_py/digest.py
+    set_monomer_data()            -- verbatim from pore_c_py/utils.py
+    CONCATEMER_ID_TAG, MONOMER_DATA_TAG, WALK_TAG -- from pore_c_py/utils.py
+
+    Reproduced unchanged so that single-enzyme output stays byte-identical to
+    upstream. tests/test_equivalence.py enforces this.
+
+src/pore_c_aqb/digest.py
+    digest_sequence() and get_concatemer_seqs() follow the structure of
+    pore_c_py.digest, with the changes listed below.
+
+
+Changes made
+------------
+1. Multiple enzymes
+   digest_sequence() and get_concatemer_seqs() take a list of enzymes instead
+   of one. Cut points are the sorted union of each enzyme's sites, de-duplicated
+   (a position cut by two enzymes is one cut in the tube).
+
+2. Version-independent site location  [src/pore_c_aqb/sites.py, new]
+   Bio.Restriction.search() changed its answer at sequence boundaries between
+   biopython 1.82 and 1.88, making the digest irreproducible across
+   environments. Sites of palindromic enzymes are now located here under one
+   documented rule. Non-palindromic (Type IIS) enzymes are still delegated to
+   Biopython.
+
+3. Enzyme validation  [src/pore_c_aqb/enzymes.py, new]
+   All names are resolved and checked before any read is processed, with
+   close-match suggestions on typos. Isoschizomers (DpnII/MboI) are collapsed.
+   Enzymes that cut twice, or have no defined cut position, are rejected.
+
+4. Per-enzyme cut statistics  [DigestStats]
+   Reports how many cuts each enzyme contributed, so a failed enzyme is visible
+   immediately. Written to stderr and, with --stats, to TSV.
+
+5. Provenance
+   A @PG line recording the tool, version, command line and enzyme list is
+   added to the output BAM header.
+
+6. Command-line interface  [src/pore_c_aqb/cli.py, new]
+   Argument-compatible with `pore-c-py digest`; adds --stats and --dry-run.

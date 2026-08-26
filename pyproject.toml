@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pore-c-aqb"
+dynamic = ["version"]
+description = "Multi-enzyme digestion of Pore-C / CiFi concatemers (wf-pore-c_AQB)"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [{ name = "Antoine Quoniam-Pasmant" }]
+keywords = ["pore-c", "hi-c", "3C", "restriction", "concatemer", "nanopore", "pacbio"]
+classifiers = [
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+  "Programming Language :: Python :: 3",
+]
+dependencies = ["pysam>=0.19", "biopython>=1.79"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-cov", "flake8"]
+
+[project.scripts]
+pore-c-aqb = "pore_c_aqb.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/AQB/wf-pore-c_AQB"
+Upstream = "https://github.com/epi2me-labs/pore-c-py"
+
+[tool.setuptools.dynamic]
+version = { attr = "pore_c_aqb.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

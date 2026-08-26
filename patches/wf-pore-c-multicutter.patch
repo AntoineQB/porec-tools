@@ -1,0 +1,42 @@
+Subject: [PATCH] allow several restriction enzymes in --cutter
+
+wf-pore-c passes --cutter straight to `pore-c-py digest`, which accepts a
+single enzyme. Protocols using two or more (DpnII + NlaIII, or Arima's
+DpnII + HinfI) therefore have the junctions of the second enzyme left
+undigested: the affected monomer spans two loci, aligns to one, and the rest
+is soft-clipped away.
+
+This swaps the digest for `pore-c-aqb digest`, which takes a comma-separated
+list and cuts at the union of the sites, and relaxes the schema so a list is
+accepted. With a single enzyme the output is byte-identical to before.
+
+Requires pore-c-aqb in the process container:
+    pip install git+https://github.com/AQB/wf-pore-c_AQB.git
+
+---
+ modules/local/pore-c.nf | 2 +-
+ nextflow_schema.json    | 3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/modules/local/pore-c.nf b/modules/local/pore-c.nf
+--- a/modules/local/pore-c.nf
++++ b/modules/local/pore-c.nf
+@@
+-    pore-c-py digest "${params.cutter}" --max_monomers ${params.max_monomers} \
++    pore-c-aqb digest "${params.cutter}" --max_monomers ${params.max_monomers} \
+         --excluded_list "filtered_reads.txt" \
+         --header "concatemers.bam" \
+         --threads ${task.cpus} |
+
+diff --git a/nextflow_schema.json b/nextflow_schema.json
+--- a/nextflow_schema.json
++++ b/nextflow_schema.json
+@@
+             "cutter": {
+                 "type": "string",
+-                "description": "The enzyme used in the restriction digest.",
+-                "help_text": "Any enzyme from the Biopython restriction dictionary can be used.",
++                "description": "The enzyme(s) used in the restriction digest.",
++                "help_text": "Any enzyme from the Biopython restriction dictionary. Several may be given, comma-separated, e.g. 'DpnII,NlaIII' - cut points are the union of their sites.",
+                 "default": "DpnII"
+             },

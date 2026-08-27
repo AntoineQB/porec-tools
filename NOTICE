@@ -66,7 +66,15 @@ Changes made
    background, which is the test of whether an enzyme actually cut. Not derived
    from upstream code.
 
-7. Upstream options implemented here
+7. Merging of falsely split fragments  [src/pore_c_aqb/merge.py, new]
+   Standalone command `pore-c-aqb merge`. The in silico digest cuts at every
+   recognition site, including the many that the enzyme did not cut in vitro,
+   which inflates the Hi-C diagonal with contacts that never happened. This
+   merges monomers that are consecutive along the read and contiguous on the
+   genome, which can only be decided after alignment. Not derived from
+   upstream code.
+
+8. Upstream options implemented here
    --max_monomers, --excluded_list, --excluded_bam (exclusion of
    over-digested concatemers), --recursive and --glob (directory input), and
    both positional orders for INPUT and ENZYME. wf-pore-c passes these, and
@@ -77,9 +85,9 @@ Changes made
    concatemer cut into more pieces than the limit is dropped whole rather
    than trimmed.
 
-8. Provenance
+9. Provenance
    A @PG line recording the tool, version, command line and enzyme list is
    added to the output BAM header.
 
-9. Command-line interface  [src/pore_c_aqb/cli.py, new]
+10. Command-line interface  [src/pore_c_aqb/cli.py, new]
    Argument-compatible with `pore-c-py digest`; adds --stats and --dry-run.

@@ -117,6 +117,41 @@ samtools view -H monomers.ns.bam | grep pore-c-aqb
 
 ---
 
+## After the workflow: undo the cuts the enzyme never made
+
+The digest is deliberately generous — it cuts at every recognition site,
+because from the read sequence alone an uncut site inside a fragment is
+indistinguishable from a reconstituted ligation junction. That over-cutting has
+to be undone once the monomers are aligned, or the Hi-C diagonal is inflated by
+contacts that never happened.
+
+```bash
+pore-c-aqb merge sample.ns.bam \
+    --output fragments.tsv.gz \
+    --pairs contacts.pairs --sizes hg38.sizes.genome \
+    --stats merge_stats.json --min-fragments 2
+```
+
+Where it sits in the chain:
+
+```
+concatemers.bam
+  -> pore-c-aqb digest      cut at every site (over-cuts, unavoidably)
+  -> minimap2               each monomer gets a genomic position
+  -> pore-c-aqb merge       glue back what was never really cut
+  -> .pairs -> cooler / juicer
+```
+
+`fragments.tsv.gz` is one row per merged fragment: read, chromosome, start,
+end, midpoint, strand, MAPQ, and how many monomers were glued. `contacts.pairs`
+is 4DN v1.0, ready for `cooler cload pairs` or `juicer_tools pre`.
+
+Read the before/after table it prints. A large `<1kb` share **before** merging
+is the artefact itself: pieces of one uncut restriction fragment being paired
+with each other, landing on the diagonal.
+
+---
+
 ## Which enzymes did my library actually use?
 
 The digest report cannot answer this, and does not pretend to: it counts sites

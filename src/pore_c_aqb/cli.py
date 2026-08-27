@@ -107,6 +107,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help=("Print what each enzyme will do, then exit without reading "
               "input. Use it to check the enzymes before a long run."))
 
+    sub.add_parser(
+        "merge", add_help=False,
+        help=("Glue back fragments the in silico digest split but the enzyme "
+              "never cut. Fixes the inflated Hi-C diagonal."))
+    sub.add_parser(
+        "junctions", add_help=False,
+        help=("Which enzymes actually cut this library? Motif enrichment at "
+              "ligation junctions, from aligned monomers."))
+
     verb = d.add_mutually_exclusive_group()
     verb.add_argument(
         "--debug", action="store_const", dest="log_level",
@@ -296,6 +305,16 @@ def run_digest(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    # merge and junctions own their (long) help text, so hand the rest of the
+    # command line straight to them rather than re-declaring it here
+    if argv and argv[0] == "merge":
+        from pore_c_aqb.merge import main as merge_main
+        return merge_main(argv[1:])
+    if argv and argv[0] == "junctions":
+        from pore_c_aqb.junctions import main as junctions_main
+        return junctions_main(argv[1:])
+
     parser = _build_parser()
     args = parser.parse_args(argv)
     _setup_logging(getattr(args, "log_level", logging.INFO),

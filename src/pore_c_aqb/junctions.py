@@ -37,44 +37,23 @@ from __future__ import annotations
 import argparse
 import random
 import sys
-from collections import defaultdict
 
 import pysam
 
 from pore_c_aqb.enzymes import EnzymeSpecError, resolve_enzymes
+from pore_c_aqb.reads import iter_concatemers, read_order_key  # noqa: F401
 from pore_c_aqb.sites import site_regex
-
-
-def read_order_key(aln) -> int:
-    """Position of this monomer along its concatemer.
-
-    ``Xc`` is the (start, end, index, count) tag written by the digest. Falling
-    back to the name suffix keeps the script usable on BAMs where Xc was
-    stripped, since monomer names are ``<read>:<start>:<end>``.
-    """
-    try:
-        return int(aln.get_tag("Xc")[0])
-    except (KeyError, TypeError, IndexError):
-        parts = aln.query_name.rsplit(":", 2)
-        return int(parts[1]) if len(parts) == 3 else 0
 
 
 def junction_boundaries(bam_path: str, mapq: int, min_jump: int):
     """Plus-strand coordinates of internal ligation junctions.
 
     Yields ``(chrom, position)`` for both sides of each junction where the two
-    monomers are on different chromosomes or more than ``min_jump`` apart.
+    monomers land on different chromosomes or more than ``min_jump`` apart.
     """
-    bam = pysam.AlignmentFile(bam_path, "rb")
-    groups: dict[str, list] = defaultdict(list)
-    current = None
-
-    def flush(alns):
-        alns = [a for a in alns
-                if not a.is_unmapped and not a.is_secondary
-                and not a.is_supplementary and a.mapping_quality >= mapq]
-        alns.sort(key=read_order_key)
-        for left, right in zip(alns, alns[1:]):
+    for _, alignments in iter_concatemers(bam_path):
+        kept = [a for a in alignments if a.mapping_quality >= mapq]
+        for left, right in zip(kept, kept[1:]):
             far = (left.reference_name != right.reference_name
                    or abs(right.reference_start - left.reference_start)
                    > min_jump)
@@ -88,17 +67,6 @@ def junction_boundaries(bam_path: str, mapq: int, min_jump: int):
             yield (right.reference_name,
                    right.reference_end if right.is_reverse
                    else right.reference_start)
-
-    for aln in bam:
-        mi = aln.get_tag("MI") if aln.has_tag("MI") else \
-            aln.query_name.rsplit(":", 2)[0]
-        if current is not None and mi != current:
-            yield from flush(groups.pop(current, []))
-        current = mi
-        groups[mi].append(aln)
-    if current is not None:
-        yield from flush(groups.pop(current, []))
-    bam.close()
 
 
 def motif_at(ref, chrom: str, pos: int, enzyme, tol: int) -> bool:

@@ -82,6 +82,65 @@ tool labelled the column "cuts", which invited precisely the wrong conclusion.
 
 ---
 
+## Undoing the cuts the enzyme never made
+
+The digest cuts at **every** recognition site. The enzyme in the tube did not:
+real digestion is incomplete, so a genuine restriction fragment usually
+contains several uncut sites and ends up as several monomers that align
+head-to-tail on the genome.
+
+Nothing warns you, and the damage is severe. A locus split into *a* pieces
+facing a locus split into *b* pieces yields `a x b` pairs for **one** real
+contact — and the *a* pieces of a single locus get paired with each other,
+landing straight on the diagonal. On the library this tool came from: 11-fold
+duplication at 5 kb resolution, 18-fold at 25 kb, 44-76% of pairs on the
+diagonal. Juicer's normalisations cannot repair it, because only 14% of the
+bias is a row factor times a column factor; a 2.45x residual survives.
+
+This cannot be fixed during the digest. From the sequence alone, an uncut site
+inside a fragment and a reconstituted ligation junction are **identical**. The
+information only appears after alignment: two monomers consecutive along the
+read and contiguous on the genome were one uncut piece of DNA.
+
+```bash
+pore-c-aqb merge sample.ns.bam \
+    --output fragments.tsv.gz \
+    --pairs contacts.pairs --sizes hg38.sizes.genome \
+    --stats merge_stats.json --min-fragments 2
+```
+
+It prints what it changed on *your* data:
+
+```
+Read 208,121 concatemers, 2,278,102 aligned monomers.
+Merged into 450,213 fragments (5.06x fewer), keeping 129,864 molecules.
+
+Cis contacts by separation, before and after merging:
+  separation     before    after
+  <1kb            25.1%     3.3%
+  1-10kb          54.7%    23.1%
+  10kb-1Mb        13.9%    47.8%
+  >1Mb             6.2%    25.8%
+```
+
+The 10 kb - 1 Mb window, where TADs and loops live, goes from 13.9% of pairs to
+47.8%. The signal was there all along, buried under the artefact.
+
+A sanity check worth doing on your own output: merged fragment length should
+grow linearly with the number of monomers glued. It does — 356 bp for a single
+monomer, then 747, 1,170, 1,592, 1,998 bp for 2, 3, 4, 5. Roughly one
+restriction fragment added each time, which is what an uncut site means.
+
+**Order matters, and getting it wrong is silent.** Merging runs on the complete
+chain of monomers; `--mapq` is applied afterwards, to the merged blocks.
+Filtering first breaks the chain: drop a middle monomer and its two neighbours
+stop being adjacent, so they are counted as two loci in contact — a contact
+that does not exist. During development this made the molecule count *rise*
+with a stricter threshold (61,677 to 70,735), which is impossible and was the
+giveaway. Two tests pin the ordering down.
+
+---
+
 ## Install
 
 ```bash
@@ -131,15 +190,18 @@ chunked branch runs `digest "$cutter"` on stdin, its other branch runs
 Every option of `pore-c-py digest` is accepted with the same meaning, so an
 existing command line keeps working.
 
-A second command ships with the package:
+Two further commands ship with the package, both working on **aligned**
+monomers:
 
 ```
-pore-c-aqb-junctions ALIGNED_BAM REFERENCE --enzymes DpnII,NlaIII[,...]
+pore-c-aqb merge     ALIGNED_BAM [--pairs contacts.pairs] [--stats s.json]
+pore-c-aqb junctions ALIGNED_BAM REFERENCE --enzymes DpnII,NlaIII[,...]
 ```
 
-It reports which enzymes actually cut a library, from aligned monomers. This is
-the question the digest report cannot answer; see
-[`docs/INTEGRATION.md`](docs/INTEGRATION.md).
+`merge` undoes the cuts the enzyme never made — see the next section.
+`junctions` reports which enzymes actually cut a library, the question the
+digest report cannot answer. Both are also installed as `pore-c-aqb-merge` and
+`pore-c-aqb-junctions`.
 
 ## Wiring it into wf-pore-c
 

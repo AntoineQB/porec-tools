@@ -13,8 +13,14 @@ First release. Derived from pore-c-py 2.0.6.
 - Enzyme table printed before the digest, and on its own with `--dry-run`:
   site, cut position drawn on both strands (`N^GATC_N`), sticky end, expected
   site spacing. Enzymes leaving incompatible ends are flagged as such.
-- `pore-c-aqb-junctions`: the analysis that actually determines which enzymes
-  cut a library, from aligned monomers.
+- `pore-c-aqb merge` (also `pore-c-aqb-merge`): glues back the fragments the in
+  silico digest split but the enzyme never cut. Outputs merged fragments as
+  TSV, contacts as 4DN `.pairs`, and a before/after breakdown of cis distances
+  so the artefact is visible. On the reference library, 2,278,102 aligned
+  monomers collapse to 450,213 fragments and cis contacts under 10 kb fall from
+  79.8% to 26.4% of all pairs.
+- `pore-c-aqb junctions` (also `pore-c-aqb-junctions`): the analysis that
+  actually determines which enzymes cut a library, from aligned monomers.
 - Upstream options the workflow relies on: `--max_monomers`, `--excluded_list`,
   `--excluded_bam`, `--recursive`, `--glob`, and both positional orders for
   the input and the enzyme (wf-pore-c uses one order in each of its two digest

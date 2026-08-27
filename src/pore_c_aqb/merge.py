@@ -421,6 +421,8 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument(
+        "--version", action="version", version=f"pore-c-aqb {__version__}")
+    p.add_argument(
         "bam",
         help=("Aligned monomer BAM, grouped by read name - the workflow's "
               "*.ns.bam. A coordinate-sorted BAM is rejected: the monomers of "

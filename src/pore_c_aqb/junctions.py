@@ -40,6 +40,7 @@ import sys
 
 import pysam
 
+from pore_c_aqb import __version__
 from pore_c_aqb.enzymes import EnzymeSpecError, resolve_enzymes
 from pore_c_aqb.reads import iter_concatemers, read_order_key  # noqa: F401
 from pore_c_aqb.sites import site_regex
@@ -85,6 +86,8 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(
         description=__doc__.split("Usage")[0],
         formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument(
+        "--version", action="version", version=f"pore-c-aqb {__version__}")
     p.add_argument("bam", help="Name-sorted aligned monomer BAM.")
     p.add_argument("reference", help="Indexed reference FASTA (.fai needed).")
     p.add_argument("--enzymes", required=True,

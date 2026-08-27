@@ -40,9 +40,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=PROG,
         description=(
-            "Digest concatemers into monomers using one or more restriction "
-            "enzymes. Drop-in replacement for 'pore-c-py digest' that accepts "
-            "a comma-separated list of enzymes."
+            "Pore-C / CiFi tools: a modified pore-c-py that digests with "
+            "several enzymes at once, undoes the cuts the enzyme never made, "
+            "and tells you which enzymes actually cut your library."
+        ),
+        epilog=(
+            "  pore-c-aqb digest DpnII,NlaIII reads.bam --output mono.bam\n"
+            "  pore-c-aqb merge aligned.ns.bam --output fragments.tsv.gz\n"
+            "  pore-c-aqb junctions aligned.ns.bam ref.fa --enzymes "
+            "DpnII,NlaIII\n"
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
@@ -55,6 +61,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Digest concatemers into monomers.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
+    d.add_argument(
+        "--version", action="version", version=f"{PROG} {__version__}")
     d.add_argument(
         "enzyme",
         help=("One or more restriction enzyme names. Separate several with "

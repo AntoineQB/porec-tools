@@ -108,7 +108,7 @@ coordinate-sorted file rather than reading it wrongly.
 pip install git+https://github.com/AntoineQB/porec-tools.git
 ```
 
-Needs Python >= 3.8, `pysam` and `biopython`. 
+Needs Python >= 3.9, `pysam` and `biopython`. 
 Three commands are installed:
 
 ```bash

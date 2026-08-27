@@ -7,7 +7,7 @@ name = "porec-tools"
 dynamic = ["version"]
 description = "Multi-enzyme digestion and fragment-level correction for Pore-C / CiFi concatemers. A modified pore-c-py."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 license = { file = "LICENSE" }
 authors = [{ name = "Antoine Quoniam-Pasmant" }]
 keywords = ["pore-c", "hi-c", "3C", "restriction", "concatemer", "nanopore", "pacbio"]

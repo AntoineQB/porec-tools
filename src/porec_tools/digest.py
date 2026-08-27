@@ -107,21 +107,21 @@ def find_cut_points(
 
 def digest_sequence(align, enzymes: Sequence[ResolvedEnzyme],
                     tags_remove=None, stats: DigestStats | None = None,
-                    max_monomers=None):
+                    max_monomers=None, legacy_mod_tags: bool = False):
     """Monomers of one concatemer.
 
     A concatemer excluded by ``max_monomers`` yields nothing here; use
     :func:`digest_sequence_tagged` if you need the excluded read itself.
     """
     for is_monomer, read in digest_sequence_tagged(
-            align, enzymes, tags_remove, stats, max_monomers):
+            align, enzymes, tags_remove, stats, max_monomers, legacy_mod_tags):
         if is_monomer:
             yield read
 
 
 def digest_sequence_tagged(align, enzymes: Sequence[ResolvedEnzyme],
                            tags_remove=None, stats: DigestStats | None = None,
-                           max_monomers=None):
+                           max_monomers=None, legacy_mod_tags: bool = False):
     """Split one concatemer, yielding ``(is_monomer, read)``.
 
     Mirrors pore-c-py exactly, with two additions: several enzymes, and the
@@ -160,14 +160,23 @@ def digest_sequence_tagged(align, enzymes: Sequence[ResolvedEnzyme],
         read.query_qualities = qual
         # deal with mods, upgrading tag from interim to approved spec
         if ('Mm' in tags_remove) or ('MM' in tags_remove):
-            for tag in ('Mm', 'Ml', 'MM', 'ML'):
+            for tag in ('Mm', 'Ml', 'MM', 'ML', 'MN'):
                 read.set_tag(tag, None)
-        else:
+        elif legacy_mod_tags:
+            # byte-identical to pore-c-py 2.0.6: ML as a comma separated string
             mm, ml = _vendored.get_subread_modified_bases(align, start, end)
             for tag in ('Mm', 'Ml'):
                 read.set_tag(tag, None)
             read.set_tag("MM", mm)
             read.set_tag("ML", ml)
+        else:
+            mm, ml = _vendored.get_subread_modified_bases_spec(align, start, end)
+            for tag in ('Mm', 'Ml', 'MM', 'ML', 'MN'):
+                read.set_tag(tag, None)
+            if len(ml):
+                read.set_tag("MM", mm)
+                read.set_tag("ML", ml)
+                read.set_tag("MN", len(seq))
         # lexographically sortable monomer ID
         read.query_name = \
             f"{concatemer_id}:{start:0{num_digits}d}:{end:0{num_digits}d}"
@@ -188,6 +197,7 @@ def get_concatemer_seqs(
     max_monomers=None,
     on_excluded=None,
     max_reads=None,
+    legacy_mod_tags: bool = False,
 ) -> Iterator:
     """Digest concatemers into unaligned monomers.
 
@@ -198,6 +208,7 @@ def get_concatemer_seqs(
     :param max_monomers: drop concatemers cut into more pieces than this
     :param on_excluded: called with each dropped read, for --excluded_list/bam
     :param max_reads: read only the first N concatemers
+    :param legacy_mod_tags: emit ML as a string, as pore-c-py 2.0.6 did
     """
     if stats is None:
         stats = DigestStats()
@@ -212,7 +223,8 @@ def get_concatemer_seqs(
     for align in stream:
         stats.n_concatemers += 1
         for is_monomer, read in digest_sequence_tagged(
-                align, enzymes, tags_remove, stats, max_monomers):
+                align, enzymes, tags_remove, stats, max_monomers,
+                legacy_mod_tags):
             if is_monomer:
                 stats.n_monomers += 1
                 yield read

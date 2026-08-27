@@ -141,7 +141,8 @@ def test_matches_reference_implementation(enzyme, seed):
     read = make_read(f"read{seed}", seq)
 
     ours = [_comparable(r) for r in
-            digest_sequence(copy.copy(read), resolve_enzymes(enzyme))]
+            digest_sequence(copy.copy(read), resolve_enzymes(enzyme),
+                            legacy_mod_tags=True)]
     theirs = [_comparable(r) for r in upstream_digest(copy.copy(read), enzyme)]
     assert ours == theirs
 
@@ -166,7 +167,8 @@ def test_matches_reference_with_modified_bases():
     read.set_tag("ML", array.array("B", [200] * len(c_positions)))
 
     ours = [_comparable(r) for r in
-            digest_sequence(copy.copy(read), resolve_enzymes("DpnII"))]
+            digest_sequence(copy.copy(read), resolve_enzymes("DpnII"),
+                            legacy_mod_tags=True)]
     theirs = [_comparable(r) for r in upstream_digest(copy.copy(read), "DpnII")]
     assert ours == theirs
     assert any(t[5] for t in ours), "expected at least one MM tag to be set"
@@ -229,7 +231,7 @@ def test_matches_upstream_container_with_modified_bases(tmp_path: Path, enzyme):
     ours = tmp_path / "ours.bam"
     subprocess.run(
         [sys.executable, "-m", "porec_tools.cli", "digest", enzyme, in_bam,
-         "--output", str(ours), "--quiet"],
+         "--output", str(ours), "--quiet", "--legacy-mod-tags"],
         check=True, capture_output=True)
     theirs = _run_upstream(tmp_path, in_bam, enzyme)
 
@@ -256,7 +258,7 @@ def test_matches_upstream_container(tmp_path: Path, enzyme):
     ours = tmp_path / "ours.bam"
     subprocess.run(
         [sys.executable, "-m", "porec_tools.cli", "digest", enzyme, in_bam,
-         "--output", str(ours), "--quiet"],
+         "--output", str(ours), "--quiet", "--legacy-mod-tags"],
         check=True, capture_output=True)
 
     theirs = tmp_path / "theirs.bam"
@@ -274,3 +276,67 @@ def test_matches_upstream_container(tmp_path: Path, enzyme):
 
     assert len(got) == len(want), "different number of monomers"
     assert got == want
+
+
+# --------------------------------------------------------------------------
+# the default must produce tags that tools can actually read
+# --------------------------------------------------------------------------
+def test_default_mod_tags_are_readable_by_htslib(tmp_path):
+    """The regression this flag exists for.
+
+    pore-c-py 2.0.6 wrote ML as a comma separated string. htslib refuses it
+    with "ML tag is not of type B,C", so every modified base in the output is
+    unreadable by samtools, pysam, modkit or IGV. Reproducing 2.0.6 exactly is
+    still possible with --legacy-mod-tags, but it cannot be the default.
+    """
+    reads = [methylated_read(f"read{i}", random_seq(400 + 91 * i, seed=i))
+             for i in range(5)]
+    src = write_bam(tmp_path / "mod.bam", reads)
+    out = tmp_path / "out.bam"
+    subprocess.run(
+        [sys.executable, "-m", "porec_tools.cli", "digest", "DpnII", src,
+         "--output", str(out), "--quiet"],
+        check=True, capture_output=True)
+
+    seen = 0
+    with pysam.AlignmentFile(str(out), "rb", check_sq=False) as fh:
+        for r in fh:
+            if not r.has_tag("ML"):
+                continue
+            seen += 1
+            # pysam reports an unsigned-char array as "BC"
+            assert r.get_tag("ML", with_value_type=True)[1].startswith("B"), \
+                "ML must be a uint8 array, not a string"
+            assert r.has_tag("MN"), "MN is required alongside MM/ML"
+            assert r.get_tag("MN") == len(r.query_sequence)
+            assert r.modified_bases, "htslib must be able to parse the tags"
+    assert seen, "the fixture must produce monomers carrying ML"
+
+
+def test_legacy_flag_reproduces_the_2_0_6_form(tmp_path):
+    reads = [methylated_read("read0", random_seq(600, seed=1))]
+    src = write_bam(tmp_path / "mod.bam", reads)
+    out = tmp_path / "out.bam"
+    subprocess.run(
+        [sys.executable, "-m", "porec_tools.cli", "digest", "DpnII", src,
+         "--output", str(out), "--quiet", "--legacy-mod-tags"],
+        check=True, capture_output=True)
+    with pysam.AlignmentFile(str(out), "rb", check_sq=False) as fh:
+        types = {r.get_tag("ML", with_value_type=True)[1]
+                 for r in fh if r.has_tag("ML")}
+    assert types == {"Z"}, "legacy mode must write ML as a string"
+
+
+def test_no_empty_mod_tags_when_a_monomer_has_no_modified_base(tmp_path):
+    """2.0.6 wrote MM:Z: and ML:Z: even with nothing to report."""
+    reads = [methylated_read("read0", random_seq(800, seed=3))]
+    src = write_bam(tmp_path / "mod.bam", reads)
+    out = tmp_path / "out.bam"
+    subprocess.run(
+        [sys.executable, "-m", "porec_tools.cli", "digest", "DpnII,NlaIII",
+         src, "--output", str(out), "--quiet"],
+        check=True, capture_output=True)
+    with pysam.AlignmentFile(str(out), "rb", check_sq=False) as fh:
+        for r in fh:
+            if r.has_tag("MM"):
+                assert r.get_tag("MM"), "an empty MM tag must not be written"

@@ -113,6 +113,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "--stats", type=Path, default=None,
         help="Write the per-enzyme site report to this file as TSV.")
     d.add_argument(
+        "--legacy-mod-tags", action="store_true",
+        help=("Write ML as a comma separated string, byte-identical to "
+              "pore-c-py 2.0.6. That form is rejected by htslib ('ML tag is "
+              "not of type B,C'), which makes every modified base unreadable, "
+              "so the default is the spec-compliant uint8 array plus MN. Use "
+              "this only to reproduce a 2.0.6 run exactly."))
+    d.add_argument(
         "--dry-run", action="store_true",
         help=("Print what each enzyme will do, then exit without reading "
               "input. Use it to check the enzymes before a long run."))
@@ -330,7 +337,8 @@ def run_digest(args) -> int:
             for read in get_concatemer_seqs(
                     infile, enzymes, remove_tags=args.remove_tags, stats=stats,
                     max_monomers=args.max_monomers, on_excluded=on_excluded,
-                    max_reads=remaining):
+                    max_reads=remaining,
+                    legacy_mod_tags=args.legacy_mod_tags):
                 out.write(read)
                 if stats.n_concatemers != seen:
                     seen = stats.n_concatemers

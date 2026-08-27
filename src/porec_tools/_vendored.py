@@ -8,12 +8,25 @@ of this tool is byte-for-byte identical to the original when a single enzyme is
 used. Do not "improve" anything here: any divergence breaks that guarantee, and
 ``tests/test_equivalence.py`` will fail.
 
-Modifications: none. Only the surrounding module layout differs.
+Two versions of the mod-base helper live here, both verbatim:
+
+* ``get_subread_modified_bases``      from 2.0.6, which returns ML as a comma
+  separated string. That is what wf-pore-c 2.0.6 emitted, and keeping it is
+  what makes the byte-identity test against that image possible.
+* ``get_subread_modified_bases_spec`` from 2.1.5, which returns ML as a
+  ``array.array('B')``. This is the one the SAM specification requires, and the
+  default here, because htslib rejects the string form outright
+  (``ML tag is not of type B,C``), making every modified base unreadable.
+
+Modifications: none beyond renaming the second one so both can coexist.
 """
 from __future__ import annotations
 
+import array
+
 __all__ = [
     "CONCATEMER_ID_TAG",
+    "get_subread_modified_bases_spec",
     "MONOMER_DATA_TAG",
     "get_subread_modified_bases",
     "splits_to_intervals",
@@ -94,3 +107,54 @@ def set_monomer_data(align, start, end, read_length, idx, num_intervals):
     align.set_tag(
         MONOMER_DATA_TAG,
         [start, end, read_length, idx, num_intervals])
+
+
+def get_subread_modified_bases_spec(align, start, end):
+    """Get modified bases subread, spec-compliant (pore-c-py 2.1.5).
+
+    :param align: pysam.AlignedSegment.
+    :param start: start coordinate to trim to.
+    :param end: exclusive end co-ordinate.
+    """
+    # we use and array here since thats what pysam uses for the tag,
+    # so might be a bit faster than an intermediate list.
+    mm_str, ml_arr = "", array.array('B')
+    base_indices = {}
+    seq = align.query_sequence[start:end]
+    for mod_key, mod_data in align.modified_bases.items():
+        # find the modifications that overlap the subread
+        idx = [
+            x for x in range(len(mod_data)) if
+            start <= mod_data[x][0] < end]
+        probs_dic = dict(mod_data)
+        if not idx:  # no mod bases (of this type) in the subread
+            continue
+        try:
+            canonical_base, strand, skip_scheme, mod_type = mod_key
+        except ValueError:
+            canonical_base, strand, mod_type = mod_key
+            skip_scheme = ""
+        if canonical_base == "N":
+            base_indices[canonical_base] = list(range(len(seq)))
+        elif canonical_base not in base_indices:
+            base_indices[canonical_base] = [
+                x for x, b in enumerate(seq) if b.upper() == canonical_base
+            ]
+        base_offsets, probs = zip(*[mod_data[i] for i in idx])
+        strand = "+" if strand == 0 else "-"
+        deltas = []
+        counter = 0
+        for seq_idx in base_indices[canonical_base]:
+            orig_idx = seq_idx + start
+            if orig_idx in base_offsets:  # is modified
+                ml_arr.append(probs_dic[orig_idx])
+                deltas.append(str(counter))
+                counter = 0
+            else:
+                counter += 1
+            deltas_formatted = ','.join(deltas)
+        mm_str += (
+                f"{canonical_base}{strand}{mod_type}{skip_scheme}"
+                f",{deltas_formatted};"
+            )
+    return mm_str, ml_arr

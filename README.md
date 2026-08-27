@@ -410,6 +410,11 @@ porec digest [INPUT ...] ENZYME   [options]      # upstream's order
   --dry-run            Print what each enzyme will do, then exit.       NEW
                        Reads no data, so it costs nothing before a
                        long run.
+  --legacy-mod-tags    Write ML as a comma separated string, exactly    NEW
+                       as pore-c-py 2.0.6 did. htslib rejects that
+                       form, so the default is the spec-compliant
+                       uint8 array plus MN. Only for reproducing a
+                       2.0.6 run bit for bit.
   --remove_tags ...    Extra SAM tags to strip.
   --max_reads N        Take only the first N concatemers.
   --max_monomers N     Drop a concatemer cut into more than N monomers.
@@ -520,6 +525,20 @@ Validated on **16,758 real PacBio 3C reads, 259,214 monomers**, of which
 203,342 carry base-modification tags: zero differences. The MM/ML
 recomputation is vendored verbatim from upstream (`src/porec_tools/_vendored.py`)
 so that this holds.
+
+That comparison runs with `--legacy-mod-tags`. 2.0.6 wrote `ML` as a comma
+separated string, and htslib refuses it outright:
+
+```
+[E::bam_parse_basemod2] ... ML tag is not of type B,C
+```
+
+Every modified base in such a file is unreadable by samtools, pysam, modkit or
+IGV. So the default here is the spec-compliant `ML:B:C` plus `MN`, vendored
+verbatim from pore-c-py 2.1.5. The flag exists so the byte-identity check
+against 2.0.6 stays possible, and for nothing else. Positions, monomer
+boundaries and every other tag are the same either way, so a Hi-C result does
+not change.
 
 > Pin the image, not the package name. The standalone `ontresearch/pore-c-py`
 > image is a later 2.1.x which changed the mod-base tags (`ML` became a uint8

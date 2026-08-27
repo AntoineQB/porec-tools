@@ -45,14 +45,14 @@ First release. Derived from pore-c-py 2.0.6.
 ### Notes on the report
 The per-enzyme count is labelled **sites found**, not "cuts". A pre-release
 version called it "cuts" and reported, on a real library, `HindIII 1,497 cuts
-(9.2%)` — for an enzyme that demonstrably never cut it. The count is of motif
+(9.2%)` for an enzyme that demonstrably never cut it. The count is of motif
 occurrences in the reads, and every motif occurs in genomic DNA by chance; a
 failed enzyme still scores highly. The report now prints the chance rate beside
 the observed one and states plainly that it is not a test of cutting, pointing
 at `pore-c-aqb-junctions`, which is.
 
 ### Guarantees
-- With a single enzyme, output is identical to `pore-c-py` 2.0.6 — the version
+- With a single enzyme, output is identical to `pore-c-py` 2.0.6, the version
   inside the wf-pore-c container. Verified against that image on 16,758 real
   PacBio 3C reads: 259,214 monomers, 203,342 of them carrying base-modification
   tags, with **zero differences on every field and every tag, value types

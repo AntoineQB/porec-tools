@@ -14,7 +14,7 @@ Running the digest once per enzyme and merging the outputs afterwards would be
 wrong in kind, not just in degree: it produces *overlapping monomer sets*
 rather than one partition of the read. A read cut by DpnII into `[0,50)[50,90)`
 and by NlaIII into `[0,30)[30,90)` has a true double digest of
-`[0,30)[30,50)[50,90)` — which neither single digest contains.
+`[0,30)[30,50)[50,90)`, which neither single digest contains.
 
 So `find_cut_points` takes the union of positions, then reuses upstream's
 `splits_to_intervals` unchanged.
@@ -26,27 +26,27 @@ honestly.
 
 ---
 
-## 2. Biopython for searching, not a hand-rolled scanner — then partly the
+## 2. Biopython for searching, not a hand-rolled scanner, then partly the
    opposite
 
 ### First attempt: one regex pass over all motifs
 
 The obvious optimisation is a single alternation regex
-(`GATC|CATG|GA[ACGT]TC|…`) scanned once, instead of one Biopython pass per
+(`GATC|CATG|GA[ACGT]TC|...`) scanned once, instead of one Biopython pass per
 enzyme. Prototyped and measured:
 
 | enzymes | regex | Biopython | speed-up |
 |---|---:|---:|---:|
-| 1 | 0.028 ms | 0.105 ms | 3.7× |
-| 2 | 0.180 ms | 0.223 ms | 1.2× |
-| 4 | 0.289 ms | 0.414 ms | 1.4× |
+| 1 | 0.028 ms | 0.105 ms | 3.7x |
+| 2 | 0.180 ms | 0.223 ms | 1.2x |
+| 4 | 0.289 ms | 0.414 ms | 1.4x |
 
 **And 243 wrong answers out of 1,600.** A plain alternation scan consumes its
 match and resumes after it, so overlapping sites are lost: in `CATGATC` the
 `CATG` match at 0 swallows the `GATC` that starts at 3.
 
-For 1.2–1.4× on the realistic case, against a demonstrated correctness bug, the
-trade was refused. The digest is not the bottleneck anyway — alignment costs an
+For 1.2 to 1.4x on the realistic case, against a demonstrated correctness bug, the
+trade was refused. The digest is not the bottleneck anyway. Alignment costs an
 order of magnitude more.
 
 ### Then: a reproducibility problem forced a scanner after all
@@ -65,7 +65,7 @@ The monomers involved are a few bases long and never align, so no result
 changes. But the *same BAM digested on two machines yields different monomer
 counts*, and a tool meant to be cited cannot do that.
 
-`sites.py` therefore scans for sites itself — using a **lookahead** regex,
+`sites.py` therefore scans for sites itself, using a **lookahead** regex,
 `(?=(GATC))`, which is zero-width and so reports overlapping matches, avoiding
 the bug that killed the first attempt. One documented rule: a cut at
 `site_start + fst5` for every occurrence, kept when inside `[0, len]`.
@@ -137,7 +137,7 @@ Also handled at resolution time:
   per-enzyme report.
 - **Rejected**: enzymes that cut twice (two cut points per site, which
   `splits_to_intervals` does not model), and enzymes with no defined cut
-  position — for instance `HpyUM037X`, whose site is `TNGGNAG|GTGGNAG`.
+  position, for instance `HpyUM037X`, whose site is `TNGGNAG|GTGGNAG`.
 - **Typos** get close-match suggestions, case-insensitive first, so `dpnii`
   points at `DpnII`.
 
@@ -168,7 +168,7 @@ Both were wrong, and dangerously so. On the very run above it printed:
   HindIII      AAGCTT            1,497 cuts (  9.2%)
 ```
 
-HindIII did not cut this library — junction analysis puts `AAGCTT` *below*
+HindIII did not cut this library. Junction analysis puts `AAGCTT` *below*
 background at ligation junctions. What the number counts is occurrences of the
 motif in the reads, and `AAGCTT` occurs every ~4 kb in human DNA no matter what
 was in the tube. A user reading "9.2% cuts" would conclude the enzyme worked.
@@ -186,7 +186,7 @@ Two things were changed:
 
 What the digest table legitimately gives you: confirmation the enzyme was
 applied, a typo check (`0 sites` warns), and the share of fragmentation each
-enzyme contributes — the number you need to decide whether a second enzyme
+enzyme contributes, the number you need to decide whether a second enzyme
 earned its place.
 
 ### A diagnostic that was tried and rejected
@@ -194,7 +194,7 @@ earned its place.
 Before settling on this, the read termini were tried: a concatemer's outer ends
 are genuine cuts, so a read starting on an enzyme's cut should begin with
 `site[fst5:]`. On 1,036 real reads it returned **0.0% for every enzyme,
-including DpnII**, which certainly cut — PacBio reads carry adapters and
+including DpnII**, which certainly cut. PacBio reads carry adapters and
 barcodes at their ends, so the termini are not cut sites. Recording it here so
 it is not re-attempted.
 
@@ -211,7 +211,7 @@ it is not re-attempted.
 | `pore-c-aqb digest DpnII,NlaIII` | 60.8 s | 275 reads/s |
 
 No regression. The second enzyme costs ~50%, split between the extra search and
-a 2.4× larger output to write (259,214 → 634,479 monomers).
+a 2.4x larger output to write (259,214 -> 634,479 monomers).
 
 `--threads` only affects BAM compression (14.1 s vs 15.0 s at 4 threads); the
 work is dominated by MM/ML recomputation, which is per-monomer and vendored.

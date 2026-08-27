@@ -9,7 +9,7 @@ factual, useful number: it confirms the enzyme was really applied, catches a
 name typo, and shows how much each enzyme contributes to the fragmentation.
 
 It is *not* evidence that the enzyme cut in the tube. Every enzyme's site
-occurs in genomic DNA whether or not the enzyme was in the reaction — AAGCTT
+occurs in genomic DNA whether or not the enzyme was in the reaction. AAGCTT
 turns up roughly every 4 kb by chance alone. An enzyme that failed completely
 still shows a large site count here. The report therefore says "sites found",
 never "cuts", and prints the chance rate beside the observed one so the reader
@@ -27,7 +27,7 @@ Displaying the cut
 ``fst5=0`` means nothing to a bench biologist. ``N^GATC_N`` does: it shows both
 strands, so the sticky end is visible. That string comes from Biopython's
 ``elucidate()``, which was verified identical between biopython 1.82 and 1.88
-across all 1,086 shared enzymes — unlike ``search()``, which is not (see
+across all 1,086 shared enzymes, unlike ``search()``, which is not (see
 ``sites.py``). It is used for display only; cut positions never come from it.
 """
 from __future__ import annotations
@@ -51,7 +51,7 @@ def expected_site_spacing(site: str) -> float:
 
     A fully specified base divides the expected spacing by 4; an ambiguity code
     divides it by 4 / (number of bases it allows), so GANTC gives 256 rather
-    than 1024 — the N is free.
+    than 1024, because the N is free.
     """
     from pore_c_aqb.sites import IUPAC_CLASSES
 

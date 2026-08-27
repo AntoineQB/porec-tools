@@ -15,15 +15,15 @@ Biopython 1.88 drops sites whose second-strand cut would land exactly on a
 sequence boundary; 1.82 keeps them. Measured on 350 enzyme/sequence pairs the
 two versions disagree on 0.6% of cases, always at position 0 or at the very
 end, and the monomers involved are a few bases long and never align. The
-scientific impact is nil — but *the same BAM digested on two machines can give
+scientific impact is nil, but *the same BAM digested on two machines can give
 different monomer counts*, which is not acceptable in a tool meant to be
 shared and cited.
 
 What we do about it
 -------------------
-For **palindromic** enzymes — which is every enzyme used in 3C/Hi-C protocols
+For **palindromic** enzymes, which is every enzyme used in 3C/Hi-C protocols
 (DpnII, NlaIII, HinfI, MseI, HindIII, EcoRI, BglII, NcoI, DdeI, Csp6I, ApoI,
-BamHI, AluI, HaeIII, TaqI, …) — we locate sites ourselves and apply one
+BamHI, AluI, HaeIII, TaqI, ...), we locate sites ourselves and apply one
 documented rule, so the result no longer depends on the installed Biopython.
 
 For **non-palindromic** enzymes we hand the search back to Biopython. Those are

@@ -6,8 +6,8 @@ Derived from ``pore_c_py.digest`` (Oxford Nanopore Technologies PLC).
 
 The only behavioural change is that :func:`find_cut_points` takes a *list* of
 enzymes and returns the sorted union of their cut positions. Everything
-downstream — interval splitting, sequence and quality trimming, MM/ML tag
-recomputation, monomer naming and tagging — is unchanged, which is what lets
+downstream (interval splitting, sequence and quality trimming, MM/ML tag
+recomputation, monomer naming and tagging) is unchanged, which is what lets
 :mod:`tests.test_equivalence` assert byte-identical output against the original
 in the single-enzyme case.
 
@@ -80,7 +80,7 @@ def find_cut_points(
     across Biopython versions for palindromic enzymes.
 
     Two enzymes can cut at the same position. That is one cut in the tube, so
-    it must be one cut here — hence the set.
+    it must be one cut here, hence the set.
     """
     if isinstance(sequence, Seq):
         sequence = str(sequence)

@@ -20,7 +20,7 @@ So: collect junction boundaries, ask how often each enzyme's site is at one,
 and divide by the same quantity measured at random positions on the same
 chromosomes. That ratio is the answer. Around 1 means the enzyme did nothing.
 
-The outer ends of a concatemer are deliberately ignored — they carry adapters
+The outer ends of a concatemer are deliberately ignored. They carry adapters
 and trimming artefacts, not clean cut sites.
 
 Usage

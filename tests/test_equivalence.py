@@ -15,7 +15,7 @@ Two levels of checking:
   published wf-pore-c image and diffs the BAMs. Skipped when Docker or the
   image is unavailable, so CI stays green on machines without it.
 
-The image is deliberately ``wf-pore-c``, which carries pore-c-py **2.0.6** —
+The image is deliberately ``wf-pore-c``, which carries pore-c-py **2.0.6**,
 the version the workflow actually runs, and the one ``_vendored.py`` was taken
 from. The standalone ``ontresearch/pore-c-py`` image is a later 2.1.x that
 changed the mod-base tags (``ML`` became a uint8 array and ``MN`` was added);

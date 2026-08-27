@@ -25,7 +25,7 @@ workflow does with over-digested reads.
 
 Nothing in the workflow is touched, and `digest_stats.tsv` records how many
 sites each enzyme had and how much of the fragmentation it accounts for. (It
-does *not* tell you whether an enzyme cut — see the last section.)
+does *not* tell you whether an enzyme cut, see the last section.)
 
 ---
 
@@ -42,7 +42,7 @@ git apply /path/to/wf-pore-c_AQB/patches/wf-pore-c-multicutter.patch
 It does two things:
 
 1. swaps `pore-c-py digest` for `pore-c-aqb digest` in `modules/local/pore-c.nf`
-   — at **both** call sites;
+   at **both** call sites;
 2. documents the comma-separated form in `nextflow_schema.json`.
 
 The two call sites matter. `digest_align_annotate` branches on `chunk_size`,
@@ -59,7 +59,7 @@ pore-c-py digest "concatemers.bam" "${meta.cutter}" ...
 `--excluded_list` options both branches pass. Patching only one branch, or
 dropping those options, leaves the workflow broken on one of its two paths.
 
-The container must then contain the package — see below.
+The container must then contain the package, see below.
 
 ---
 
@@ -100,13 +100,13 @@ Enzymes resolved from 'DpnII,NlaIII':
   NlaIII  CATG  _CATG^              3' CATG     256 bp      palindromic
 ```
 
-Check the site and the cut position against your protocol here — it costs a
+Check the site and the cut position against your protocol here. It costs a
 second, and a wrong enzyme wastes the whole run.
 
 **After the digest**, read the per-enzyme table. `0 sites` for an enzyme means
 the name is wrong or the reads are not from that run, and is flagged as a
 warning. A large count means only that the motif is present, which it always
-is — see the caveat below.
+is. See the caveat below.
 
 **Provenance** is recorded in the BAM header:
 
@@ -119,7 +119,7 @@ samtools view -H monomers.ns.bam | grep pore-c-aqb
 
 ## After the workflow: undo the cuts the enzyme never made
 
-The digest is deliberately generous — it cuts at every recognition site,
+The digest is deliberately generous. It cuts at every recognition site,
 because from the read sequence alone an uncut site inside a fragment is
 indistinguishable from a reconstituted ligation junction. That over-cutting has
 to be undone once the monomers are aligned, or the Hi-C diagonal is inflated by
@@ -163,8 +163,8 @@ pore-c-aqb-junctions monomers.aligned.ns.bam hg38.fa \
     --enzymes DpnII,NlaIII,HindIII,HinfI
 ```
 
-It takes the boundaries between consecutive monomers that jump more than 1 kb —
-genuine ligation junctions — and asks how often each enzyme's site sits there,
+It takes the boundaries between consecutive monomers that jump more than 1 kb,
+which are genuine ligation junctions, and asks how often each enzyme's site sits there,
 against random positions on the same chromosomes:
 
 ```
@@ -187,7 +187,7 @@ Notes on reading it:
   bases at monomer ends, so the boundary drifts off the true cut and the
   absolute rates understate. `--tol 10` recovers DpnII to ~79% but inflates the
   random background too, dropping every enrichment.
-- The outer ends of a concatemer are ignored — they carry adapters, not cut
+- The outer ends of a concatemer are ignored. They carry adapters, not cut
   sites. (A diagnostic based on read termini was tried first and returns 0% for
   every enzyme, including ones that certainly cut, for exactly this reason.)
 - Running this **before** the digest saves re-running it. It only needs an

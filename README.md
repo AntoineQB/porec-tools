@@ -2,7 +2,7 @@
 
 **A modified version of [`pore-c-py`](https://github.com/epi2me-labs/pore-c-py) / [`wf-pore-c`](https://github.com/epi2me-labs/wf-pore-c), for Pore-C and PacBio CiFi libraries.**
 
-This is not a new pipeline, but rather a modification of w[`wf-pore-c`](https://github.com/epi2me-labs/wf-pore-c), to add the option of a multi-enzyme digestion, and to fix some problems that were costing some contacts at the end.
+This is not a new pipeline, but rather a modification of [`wf-pore-c`](https://github.com/epi2me-labs/wf-pore-c), to add the option of a multi-enzyme digestion, and to fix some problems that were costing some contacts at the end.
 
 | | Problem | Fix |
 |---|---|---|
@@ -93,8 +93,7 @@ So `porec merge` does not go inside that pipe. You run it afterwards, on
 the `*_out.ns.bam` the workflow already writes:
 
 ```
-   wf-pore-c  (digest | fastq | minimap2 | annotate)  ->  SAMPLE_out.ns.bam  ---> porec merge                         
-                                      
+   wf-pore-c  (digest | fastq | minimap2 | annotate)  ->  SAMPLE_out.ns.bam  ---> porec merge                           
 ```
 
 Use the **name-sorted** `.ns.bam`, not the coordinate-sorted `.cs.bam`: merging
@@ -390,8 +389,6 @@ porec enzymes [QUERY] [--all]
                  Searching implies --all.
   --all          Every usable enzyme (729), not just the 3C/Hi-C shortlist.
 ```
-
-*Entirely new, no upstream equivalent.*
 
 ### `porec digest`, cut reads into monomers (unaligned input)
 

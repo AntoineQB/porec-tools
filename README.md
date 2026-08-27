@@ -17,35 +17,100 @@ Plus one reproducibility bug in a dependency, described [below](#a-reproducibili
 With a single enzyme, the digest output is **identical to upstream** — verified
 record by record, tag by tag, against the real tool. See [Correctness](#correctness).
 
+<details>
+<summary><b>Everything that changed, at a glance</b></summary>
+
+| Change | Where | Runs on |
+|---|---|---|
+| `--cutter` takes a list of enzymes; cut points are their union | `digest` | unaligned |
+| Enzyme names validated up front, with typo suggestions | `digest` | — |
+| Enzymes with no defined cut (334) or that cut twice (25) rejected, not mis-digested | `digest` | — |
+| Site search made independent of the Biopython version | `digest` | — |
+| `--stats` : per-enzyme site report, as TSV | `digest` | — |
+| `--dry-run` : show what each enzyme will do, reading no data | `digest` | — |
+| `@PG` provenance line in the output BAM header | `digest` | — |
+| Both positional orders accepted (`ENZYME INPUT` and `INPUT ENZYME`) | `digest` | — |
+| `--max_monomers`, `--excluded_list`, `--excluded_bam`, `--recursive`, `--glob` implemented, as the workflow passes them | `digest` | — |
+| **New command:** merge fragments the enzyme never cut, write 4DN `.pairs` | `merge` | **aligned** |
+| **New command:** motif enrichment at ligation junctions | `junctions` | **aligned** |
+| **New command:** list and search usable enzymes | `enzymes` | — |
+| Progress bar with a real percentage and ETA | all long commands | — |
+| Clear errors instead of tracebacks on bad input | all | — |
+
+Full detail in [`NOTICE`](NOTICE), which lists every file taken from upstream
+and every change made to it.
+
+</details>
+
 ---
 
 ## Where it fits
 
+Two of the three fixes act on **unaligned** reads, one on **aligned** ones.
+That split is not a design preference — it is forced by what information exists
+at each point, and it is the thing to understand before using the tool.
+
 ```
-   concatemers.bam  (unaligned reads from the sequencer)
+   concatemers.bam   (unaligned reads, straight off the sequencer)
           |
           v
-   +-----------------------+
-   |  pore-c-aqb digest    |   cut each read into monomers
-   |  DpnII,NlaIII         |   <- FIX 1: several enzymes
-   +-----------------------+
-          |  monomers.bam
+   +---------------------------+
+   |  pore-c-aqb digest        |  cut each read into monomers
+   |  DpnII,NlaIII             |  <- FIX 1
+   +---------------------------+
+          |  monomers, still unaligned
           v
-   +-----------------------+
-   |  minimap2             |   each monomer gets a genomic position
-   +-----------------------+
-          |  aligned.ns.bam
-          +------------------------------+
-          v                              v
-   +-----------------------+   +-----------------------+
-   |  pore-c-aqb merge     |   | pore-c-aqb junctions  |
-   |  undo the false cuts  |   | which enzymes cut?    |
-   |  <- FIX 2             |   | <- FIX 3 (diagnostic) |
-   +-----------------------+   +-----------------------+
+   +---------------------------+
+   |  minimap2                 |  NOW each monomer gets a genomic position.
+   |  (unchanged)              |  Only here does it become knowable which
+   +---------------------------+  cuts were real.
+          |  aligned.ns.bam   (name-sorted: monomers of a read stay together)
+          |
+          +--------------------------------+
+          v                                v
+   +---------------------------+   +---------------------------+
+   |  pore-c-aqb merge         |   |  pore-c-aqb junctions     |
+   |  undo the false cuts      |   |  which enzymes cut?       |
+   |  <- FIX 2                 |   |  <- FIX 3 (read-only)     |
+   +---------------------------+   +---------------------------+
           |  fragments.tsv.gz + contacts.pairs
           v
       cooler / juicer
 ```
+
+**Why the line falls there.** In an unaligned read, a `GATC` that the enzyme
+never cut and a `GATC` rebuilt by ligation are the same four letters. Nothing
+distinguishes them. Only once each monomer has a genomic position can you see
+that two of them land side by side — which means the site between them was
+never cut. So `merge` and `junctions` *cannot* run before alignment, and
+`digest` cannot wait for it.
+
+### Where does alignment happen in wf-pore-c?
+
+Inside the same process as the digest. The workflow streams the whole thing
+through one pipe, with no intermediate file:
+
+```bash
+pore-c-py digest "concatemers.bam" "${meta.cutter}" ... |
+samtools fastq -T '*' |
+minimap2 -ay -t N reference.fasta.mmi - |
+pore-c-py annotate - "${meta.alias}" --monomers --stdout |
+tee "${meta.alias}_out.ns.bam" |
+samtools sort -o "${meta.alias}.cs.bam" -
+```
+
+So `pore-c-aqb merge` is **not** inserted into that pipe. It is a step
+*afterwards*, run on the `*_out.ns.bam` the workflow already writes:
+
+```
+   wf-pore-c  (digest | fastq | minimap2 | annotate)  ->  SAMPLE_out.ns.bam
+                                                                  |
+                                          pore-c-aqb merge  <-----+
+```
+
+Use the **name-sorted** `.ns.bam`, not the coordinate-sorted `.cs.bam`: merging
+needs the monomers of one read to be adjacent. The tool refuses a
+coordinate-sorted file rather than reading it wrongly.
 
 ---
 
@@ -94,24 +159,25 @@ pore-c-aqb digest DpnII,NlaIII --dry-run
 pore-c-aqb digest DpnII,NlaIII reads.bam \
     --output monomers.bam --stats digest_stats.tsv --threads 8
 
-# 2. align (unchanged, your usual command)
+# 2. align  <-- NOTHING OF THIS TOOL RUNS HERE. Your usual command, unchanged.
+#              Everything below needs the genomic positions it produces.
 samtools fastq -T '*' monomers.bam \
   | minimap2 -ay -x map-hifi ref.fa - \
-  | samtools view -b -o aligned.ns.bam
+  | samtools view -b -o aligned.ns.bam        # name-sorted, NOT coordinate
 
-# 3. undo the cuts the enzyme never made, and get contacts
+# 3. undo the cuts the enzyme never made, and get contacts  (needs step 2)
 pore-c-aqb merge aligned.ns.bam \
     --output fragments.tsv.gz \
     --pairs contacts.pairs --sizes hg38.sizes.genome \
     --stats merge_stats.json --min-fragments 2
 
-# 4. (diagnostic) which enzymes actually cut?
+# 4. (diagnostic, needs step 2) which enzymes actually cut?
 pore-c-aqb junctions aligned.ns.bam ref.fa --enzymes DpnII,NlaIII,HindIII
 ```
 
 ---
 
-## Knowing where it is
+## Progress: knowing how far along a run is
 
 A full library takes tens of minutes to digest and a 24 GB BAM a couple to
 merge. Silence for that long is indistinguishable from a hang, so every long
@@ -335,6 +401,121 @@ NlaIII. This command changes nothing on disk — it only reads.
 Read the **enrichment** column, not the percentages: aligners soft-clip a few
 bases at monomer ends, so the absolute rates understate. `--tol 10` recovers
 DpnII to ~79% but inflates the random background too.
+
+---
+
+## Command reference
+
+Every option of every command. `--help` on any of them prints the same, with
+more explanation.
+
+### `pore-c-aqb enzymes` — what can I digest with?
+
+```
+pore-c-aqb enzymes [QUERY] [--all]
+
+  QUERY          A name fragment ('Dpn') or a recognition site ('GATC').
+                 Searching implies --all.
+  --all          Every usable enzyme (729), not just the 3C/Hi-C shortlist.
+```
+
+*Entirely new — no upstream equivalent.*
+
+### `pore-c-aqb digest` — cut reads into monomers (unaligned input)
+
+Drop-in for `pore-c-py digest`: every upstream option is accepted with the same
+meaning, and both positional orders work, because wf-pore-c uses both.
+
+```
+pore-c-aqb digest ENZYME [INPUT ...]   [options]
+pore-c-aqb digest [INPUT ...] ENZYME   [options]      # upstream's order
+
+  ENZYME               One or more enzyme names. 'DpnII', 'DpnII,NlaIII',
+                       'DpnII+NlaIII' all work.
+  INPUT                Unaligned BAM(s), a directory, or '-' for stdin
+                       (the default).
+
+  --output PATH        Output BAM ('-' for stdout).                    [-]
+  --header PATH        BAM whose header to copy. Required with stdin.
+  --stats PATH         Per-enzyme site report, as TSV.                  NEW
+  --dry-run            Print what each enzyme will do, then exit.       NEW
+                       Reads no data, so it costs nothing before a
+                       long run.
+  --remove_tags ...    Extra SAM tags to strip.
+  --max_reads N        Take only the first N concatemers.
+  --max_monomers N     Drop a concatemer cut into more than N monomers.
+  --excluded_list PATH Names of the reads dropped by --max_monomers.
+  --excluded_bam PATH  The dropped reads themselves.
+  --recursive          Search an input directory recursively.
+  --glob PATTERN       Which files to take from a directory.       [*.bam]
+  --threads N          Threads for BAM compression.                    [1]
+  --debug / --quiet    Logging verbosity.
+  --logfile PATH       Also write logs here.
+  --progress / --no-progress                                           NEW
+  --version                                                            NEW
+```
+
+Also new, without a flag: **several enzymes at once**, names validated before a
+single read is touched, and a `@PG` provenance line in the output header.
+
+### `pore-c-aqb merge` — undo the false cuts (ALIGNED input)
+
+**Runs after alignment.** See [Where it fits](#where-it-fits).
+
+```
+pore-c-aqb merge ALIGNED_BAM [options]
+
+  ALIGNED_BAM          Aligned monomer BAM, grouped by read name — the
+                       workflow's *.ns.bam. A coordinate-sorted BAM is
+                       rejected rather than silently misread.
+
+  --output PATH        Merged fragments, as TSV. '.gz' compresses.     [-]
+  --merge-gap BP       Largest gap between two monomers still counted
+                       as one uncut fragment.                        [100]
+  --mapq Q             Minimum mapping quality, applied AFTER merging.  [1]
+  --min-fragments N    Keep only molecules with at least N fragments.
+                       Use 2 for contacts, 3 for multi-way analysis.   [1]
+  --min-length BP      Drop merged fragments shorter than this.         [0]
+  --pairs PATH         Also write contacts as 4DN .pairs.
+  --sizes PATH         Chromosome sizes, to order the .pairs upper
+                       triangle consistently with your genome.
+  --min-sep BP         Drop cis pairs closer than this. Blunt; the
+                       rigorous criterion is the number of restriction
+                       sites between the two fragments.                 [0]
+  --stats PATH         Summary as JSON, with every parameter recorded.
+  --quiet              Print nothing but errors.
+  --progress / --no-progress
+  --version
+```
+
+*Entirely new — no upstream equivalent.*
+
+### `pore-c-aqb junctions` — which enzymes actually cut? (ALIGNED input)
+
+**Runs after alignment**, and writes nothing: it only reads.
+
+```
+pore-c-aqb junctions ALIGNED_BAM REFERENCE --enzymes LIST [options]
+
+  ALIGNED_BAM          Name-sorted aligned monomer BAM.
+  REFERENCE            Indexed reference FASTA (.fai required).
+  --enzymes LIST       Comma-separated, e.g. 'DpnII,NlaIII,HindIII'.
+
+  --mapq Q             Minimum monomer mapping quality.                [20]
+  --min-jump BP        Minimum genomic distance for a boundary to count
+                       as a ligation junction rather than an uncut
+                       site.                                        [1000]
+  --tol BP             Slack between the motif's cut and the alignment
+                       boundary; covers the overhang and a little
+                       soft-clipping.                                   [2]
+  --max-junctions N    Stop after this many boundaries (0 = all).  [200000]
+  --seed N             Seed for the random background, so a run is
+                       reproducible.                                    [0]
+  --progress / --no-progress
+  --version
+```
+
+*Entirely new — no upstream equivalent.*
 
 ---
 

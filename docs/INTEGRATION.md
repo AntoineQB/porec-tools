@@ -1,4 +1,4 @@
-# Using `pore-c-aqb` inside wf-pore-c
+# Using `porec` inside wf-pore-c
 
 `wf-pore-c` shells out to `pore-c-py digest "$cutter"` in its
 `digest_align_annotate` process. Making it multi-enzyme is a one-line change
@@ -11,10 +11,10 @@ Three routes, from least to most invasive.
 ## A. Run the digest yourself, keep the workflow for the rest
 
 The simplest option, and the one to prefer for a one-off reanalysis: digest
-with `pore-c-aqb`, then feed the monomers to the rest of your pipeline.
+with `porec`, then feed the monomers to the rest of your pipeline.
 
 ```bash
-pore-c-aqb digest DpnII,NlaIII reads.bam \
+porec digest DpnII,NlaIII reads.bam \
     --output monomers.ns.bam \
     --stats  digest_stats.tsv \
     --threads 8
@@ -36,12 +36,12 @@ does *not* tell you whether an enzyme cut, see the last section.)
 ```bash
 nextflow pull epi2me-labs/wf-pore-c
 cd ~/.nextflow/assets/epi2me-labs/wf-pore-c
-git apply /path/to/wf-pore-c_AQB/patches/wf-pore-c-multicutter.patch
+git apply /path/to/porec-tools/patches/wf-pore-c-multicutter.patch
 ```
 
 It does two things:
 
-1. swaps `pore-c-py digest` for `pore-c-aqb digest` in `modules/local/pore-c.nf`
+1. swaps `pore-c-py digest` for `porec digest` in `modules/local/pore-c.nf`
    at both call sites;
 2. documents the comma-separated form in `nextflow_schema.json`.
 
@@ -55,7 +55,7 @@ bamindex fetch --chunk=N concatemers.bam | pore-c-py digest "${meta.cutter}" ...
 pore-c-py digest "concatemers.bam" "${meta.cutter}" ...
 ```
 
-`pore-c-aqb` accepts either order, and implements the `--max_monomers` and
+`porec` accepts either order, and implements the `--max_monomers` and
 `--excluded_list` options both branches pass. Patching only one branch, or
 dropping those options, leaves the workflow broken on one of its two paths.
 
@@ -68,15 +68,15 @@ The container must then contain the package, see below.
 ```dockerfile
 FROM ontresearch/wf-pore-c:sha3787c234c0cacf66a67fb77da223cc2e1cb0baf0
 USER root
-RUN pip install --no-cache-dir git+https://github.com/YOUR-USERNAME/wf-pore-c_AQB.git
+RUN pip install --no-cache-dir git+https://github.com/YOUR-USERNAME/porec-tools.git
 USER $WF_UID
 ```
 
 ```bash
-docker build -t wf-pore-c-aqb:1.0.0 .
+docker build -t wf-porec:1.0.0 .
 nextflow run epi2me-labs/wf-pore-c \
     --cutter 'DpnII,NlaIII' \
-    -process.container wf-pore-c-aqb:1.0.0 \
+    -process.container wf-porec:1.0.0 \
     ...
 ```
 
@@ -90,7 +90,7 @@ same input.
 Before committing to a long run, resolve the enzymes without reading data:
 
 ```bash
-pore-c-aqb digest DpnII,NlaIII --dry-run
+porec digest DpnII,NlaIII --dry-run
 ```
 
 ```
@@ -111,8 +111,8 @@ is. See the caveat below.
 Provenance is recorded in the BAM header:
 
 ```bash
-samtools view -H monomers.ns.bam | grep pore-c-aqb
-# @PG ID:pore-c-aqb PN:pore-c-aqb VN:1.0.0 CL:... DS:multi-enzyme digest: DpnII(GATC), NlaIII(CATG)
+samtools view -H monomers.ns.bam | grep porec
+# @PG ID:porec PN:porec VN:1.0.0 CL:... DS:multi-enzyme digest: DpnII(GATC), NlaIII(CATG)
 ```
 
 ---
@@ -126,7 +126,7 @@ to be undone once the monomers are aligned, or the Hi-C diagonal is inflated by
 contacts that never happened.
 
 ```bash
-pore-c-aqb merge sample.ns.bam \
+porec merge sample.ns.bam \
     --output fragments.tsv.gz \
     --pairs contacts.pairs --sizes hg38.sizes.genome \
     --stats merge_stats.json --min-fragments 2
@@ -136,9 +136,9 @@ Where it sits in the chain:
 
 ```
 concatemers.bam
-  -> pore-c-aqb digest      cut at every site (over-cuts, unavoidably)
+  -> porec digest      cut at every site (over-cuts, unavoidably)
   -> minimap2               each monomer gets a genomic position
-  -> pore-c-aqb merge       glue back what was never really cut
+  -> porec merge       glue back what was never really cut
   -> .pairs -> cooler / juicer
 ```
 
@@ -159,7 +159,7 @@ present in the reads, and every motif is present by chance. The test that does
 work needs aligned monomers, and ships with this package:
 
 ```bash
-pore-c-aqb-junctions monomers.aligned.ns.bam hg38.fa \
+porec-junctions monomers.aligned.ns.bam hg38.fa \
     --enzymes DpnII,NlaIII,HindIII,HinfI
 ```
 

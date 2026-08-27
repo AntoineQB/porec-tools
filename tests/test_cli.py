@@ -7,7 +7,7 @@ import sys
 import pysam
 import pytest
 
-from pore_c_aqb.cli import main
+from porec_tools.cli import main
 
 from conftest import make_read, random_seq, write_bam
 
@@ -85,7 +85,7 @@ def test_provenance_recorded_in_bam_header(tmp_path, concatemers):
           "--quiet"])
     with pysam.AlignmentFile(str(out), "rb", check_sq=False) as fh:
         pg = fh.header.to_dict().get("PG", [])
-    entry = [p for p in pg if p.get("ID") == "pore-c-aqb"]
+    entry = [p for p in pg if p.get("ID") == "porec"]
     assert entry, "a @PG line must record how the file was made"
     assert "DpnII" in entry[0]["DS"] and "NlaIII" in entry[0]["DS"]
 
@@ -203,7 +203,7 @@ def test_enzyme_named_like_a_file_is_still_an_enzyme(tmp_path, concatemers):
 def _cli(*argv, stdin=None):
     """Run the CLI in a subprocess, so stdin is a real pipe."""
     return subprocess.run(
-        [sys.executable, "-m", "pore_c_aqb.cli", *argv],
+        [sys.executable, "-m", "porec_tools.cli", *argv],
         input=stdin, capture_output=True)
 
 

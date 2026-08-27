@@ -31,4 +31,4 @@ jobs:
       - name: Lint
         run: flake8 src tests --max-line-length 88
       - name: Tests
-        run: pytest -q --cov=pore_c_aqb --cov-report=term-missing
+        run: pytest -q --cov=porec_tools --cov-report=term-missing

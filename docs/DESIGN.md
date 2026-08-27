@@ -179,7 +179,7 @@ Two things were changed:
 1. The column says `sites found`, and the chance rate is printed beside the
    observed one so the reader can see they match. A closing note states that
    the number is not proof of cutting.
-2. The real test ships as a second command, `pore-c-aqb-junctions`, which
+2. The real test ships as a second command, `porec-junctions`, which
    measures motif enrichment at ligation junctions against a random background
    on the same chromosomes. It needs alignments, which is exactly why the
    digest cannot answer the question.
@@ -207,8 +207,8 @@ it is not re-attempted.
 | | time | throughput |
 |---|---:|---:|
 | upstream `pore-c-py digest DpnII` | 42.3 s | 395 reads/s |
-| `pore-c-aqb digest DpnII` | 39.9 s | 420 reads/s |
-| `pore-c-aqb digest DpnII,NlaIII` | 60.8 s | 275 reads/s |
+| `porec digest DpnII` | 39.9 s | 420 reads/s |
+| `porec digest DpnII,NlaIII` | 60.8 s | 275 reads/s |
 
 No regression. The second enzyme costs ~50%, split between the extra search and
 a 2.4x larger output to write (259,214 -> 634,479 monomers).
@@ -223,7 +223,7 @@ step run once per dataset, and small beside alignment.
 
 ```bash
 pytest                                    # correctness
-python -m pore_c_aqb.cli digest DpnII,NlaIII reads.bam --output /dev/null --stats s.tsv
+python -m porec_tools.cli digest DpnII,NlaIII reads.bam --output /dev/null --stats s.tsv
 ```
 
 The equivalence tests against upstream need Docker and the

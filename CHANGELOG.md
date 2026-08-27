@@ -5,7 +5,7 @@
 First release. Derived from pore-c-py 2.0.6.
 
 ### Added
-- `pore-c-aqb digest` accepts several restriction enzymes, comma-separated.
+- `porec digest` accepts several restriction enzymes, comma-separated.
   Cut points are the union of all their sites.
 - Per-enzyme site report on stderr and via `--stats FILE`: how many recognition
   sites each enzyme has in the reads, its share of the cut points, and the
@@ -16,17 +16,17 @@ First release. Derived from pore-c-py 2.0.6.
 - Progress bar on `digest`, `merge` and `junctions`, with a real percentage
   and ETA taken from the BGZF file offset rather than guessed. Drawn only on a
   terminal; `--progress` / `--no-progress` override. No new dependency.
-- `pore-c-aqb enzymes`: lists the enzymes you can digest with, searchable by
+- `porec enzymes`: lists the enzymes you can digest with, searchable by
   name or by recognition site, with the cut drawn on both strands and the
   sticky end each one leaves. A curated 3C/Hi-C shortlist by default, `--all`
   for the 729 usable ones.
-- `pore-c-aqb merge` (also `pore-c-aqb-merge`): glues back the fragments the in
+- `porec merge` (also `porec-merge`): glues back the fragments the in
   silico digest split but the enzyme never cut. Outputs merged fragments as
   TSV, contacts as 4DN `.pairs`, and a before/after breakdown of cis distances
   so the artefact is visible. On the reference library, 2,278,102 aligned
   monomers collapse to 450,213 fragments and cis contacts under 10 kb fall from
   79.8% to 26.4% of all pairs.
-- `pore-c-aqb junctions` (also `pore-c-aqb-junctions`): the analysis that
+- `porec junctions` (also `porec-junctions`): the analysis that
   actually determines which enzymes cut a library, from aligned monomers.
 - Upstream options the workflow relies on: `--max_monomers`, `--excluded_list`,
   `--excluded_bam`, `--recursive`, `--glob`, and both positional orders for
@@ -49,7 +49,7 @@ version called it "cuts" and reported, on a real library, `HindIII 1,497 cuts
 occurrences in the reads, and every motif occurs in genomic DNA by chance; a
 failed enzyme still scores highly. The report now prints the chance rate beside
 the observed one and states plainly that it is not a test of cutting, pointing
-at `pore-c-aqb-junctions`, which is.
+at `porec-junctions`, which is.
 
 ### Guarantees
 - With a single enzyme, output is identical to `pore-c-py` 2.0.6, the version

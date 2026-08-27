@@ -66,17 +66,17 @@ from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
 
-from pore_c_aqb import __version__
-from pore_c_aqb.progress import (
+from porec_tools import __version__
+from porec_tools.progress import (
     Progress,
     add_progress_arguments,
     progress_enabled,
 )
-from pore_c_aqb.reads import iter_concatemers, read_span
+from porec_tools.reads import iter_concatemers, read_span
 
 __all__ = ["Fragment", "merge_adjacent", "fragments_of", "MergeStats", "main"]
 
-PROG = "pore-c-aqb merge"
+PROG = "porec merge"
 
 
 @dataclass
@@ -202,7 +202,7 @@ class MergeStats:
         collapse = (self.n_monomers / self.n_fragments
                     if self.n_fragments else 0.0)
         return {
-            "tool": f"pore-c-aqb {__version__} merge",
+            "tool": f"porec {__version__} merge",
             "concatemers": self.n_concatemers,
             "aligned_monomers": self.n_monomers,
             "fragments_after_merge": self.n_fragments,
@@ -290,7 +290,7 @@ def run(args) -> int:
             pairs_fh, pairs_close = _open_out(args.pairs)
             pairs_fh.write("## pairs format v1.0\n")
             pairs_fh.write("#shape: upper triangle\n")
-            pairs_fh.write(f"#generated-by: pore-c-aqb {__version__} merge "
+            pairs_fh.write(f"#generated-by: porec {__version__} merge "
                            f"(merge-gap={args.merge_gap}, mapq={args.mapq})\n")
             for chrom, length in chrom_sizes.items():
                 pairs_fh.write(f"#chromsize: {chrom} {length}\n")
@@ -440,16 +440,16 @@ def build_parser() -> argparse.ArgumentParser:
             "  stricter threshold, which is impossible and is how it was found.\n"
             "\n"
             "EXAMPLES\n"
-            "  pore-c-aqb merge sample.ns.bam --output fragments.tsv.gz\n"
+            "  porec merge sample.ns.bam --output fragments.tsv.gz\n"
             "\n"
-            "  pore-c-aqb merge sample.ns.bam --output fragments.tsv.gz \\\n"
+            "  porec merge sample.ns.bam --output fragments.tsv.gz \\\n"
             "      --pairs contacts.pairs --sizes hg38.sizes.genome \\\n"
             "      --stats merge_stats.json\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument(
-        "--version", action="version", version=f"pore-c-aqb {__version__}")
+        "--version", action="version", version=f"porec {__version__}")
     p.add_argument(
         "bam",
         help=("Aligned monomer BAM, grouped by read name - the workflow's "

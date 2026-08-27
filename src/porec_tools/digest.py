@@ -29,14 +29,14 @@ from typing import Iterator, Sequence
 
 from Bio.Seq import Seq
 
-from pore_c_aqb import _vendored
-from pore_c_aqb.enzymes import ResolvedEnzyme
-from pore_c_aqb.sites import find_cuts_for_enzyme
+from porec_tools import _vendored
+from porec_tools.enzymes import ResolvedEnzyme
+from porec_tools.sites import find_cuts_for_enzyme
 
 __all__ = ["DigestStats", "find_cut_points", "digest_sequence",
            "digest_sequence_tagged", "get_concatemer_seqs"]
 
-logger = logging.getLogger("pore-c-aqb")
+logger = logging.getLogger("porec")
 
 
 @dataclass
@@ -47,7 +47,7 @@ class DigestStats:
     confirms each enzyme was applied and shows its share of the fragmentation.
     It is deliberately not called "cuts": a site occurring in the sequence is
     not evidence the enzyme cut it, since every motif occurs in genomic DNA by
-    chance. See :mod:`pore_c_aqb.report`.
+    chance. See :mod:`porec_tools.report`.
     """
 
     n_concatemers: int = 0
@@ -62,8 +62,8 @@ class DigestStats:
     n_shared_cut_points: int = 0
 
     def summary_lines(self, enzymes: Sequence[ResolvedEnzyme]) -> list[str]:
-        """Human-readable report; see :mod:`pore_c_aqb.report`."""
-        from pore_c_aqb.report import format_report
+        """Human-readable report; see :mod:`porec_tools.report`."""
+        from porec_tools.report import format_report
         return format_report(self, enzymes)
 
 
@@ -76,7 +76,7 @@ def find_cut_points(
 
     Positions follow ``pore-c-py``'s convention: 0-based, the cut falling
     immediately before the returned index. Site location is delegated to
-    :func:`pore_c_aqb.sites.find_cuts_for_enzyme`, which is reproducible
+    :func:`porec_tools.sites.find_cuts_for_enzyme`, which is reproducible
     across Biopython versions for palindromic enzymes.
 
     Two enzymes can cut at the same position. That is one cut in the tube, so
@@ -192,7 +192,7 @@ def get_concatemer_seqs(
     """Digest concatemers into unaligned monomers.
 
     :param input_file: pysam.AlignmentFile input
-    :param enzymes: enzymes resolved by :func:`pore_c_aqb.enzymes.resolve_enzymes`
+    :param enzymes: enzymes resolved by :func:`porec_tools.enzymes.resolve_enzymes`
     :param remove_tags: additional SAM tags to strip
     :param stats: optional :class:`DigestStats` to accumulate counters into
     :param max_monomers: drop concatemers cut into more pieces than this

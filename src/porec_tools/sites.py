@@ -87,7 +87,7 @@ def find_cuts_for_enzyme(sequence: str, enzyme) -> set[int]:
     """0-based cut positions of one enzyme on one sequence.
 
     :param sequence: the read; characters other than ACGT simply never match.
-    :param enzyme: a :class:`pore_c_aqb.enzymes.ResolvedEnzyme`.
+    :param enzyme: a :class:`porec_tools.enzymes.ResolvedEnzyme`.
     """
     n = len(sequence)
 

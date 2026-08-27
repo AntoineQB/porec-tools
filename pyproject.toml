@@ -3,9 +3,9 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pore-c-aqb"
+name = "porec-tools"
 dynamic = ["version"]
-description = "Multi-enzyme digestion of Pore-C / CiFi concatemers (wf-pore-c_AQB)"
+description = "Multi-enzyme digestion and fragment-level correction for Pore-C / CiFi concatemers. A modified pore-c-py."
 readme = "README.md"
 requires-python = ">=3.8"
 license = { file = "LICENSE" }
@@ -22,16 +22,16 @@ dependencies = ["pysam>=0.19", "biopython>=1.79"]
 dev = ["pytest>=7", "pytest-cov", "flake8"]
 
 [project.scripts]
-pore-c-aqb = "pore_c_aqb.cli:main"
-pore-c-aqb-junctions = "pore_c_aqb.junctions:main"
-pore-c-aqb-merge = "pore_c_aqb.merge:main"
+porec = "porec_tools.cli:main"
+porec-junctions = "porec_tools.junctions:main"
+porec-merge = "porec_tools.merge:main"
 
 [project.urls]
-Homepage = "https://github.com/YOUR-USERNAME/wf-pore-c_AQB"
+Homepage = "https://github.com/YOUR-USERNAME/porec-tools"
 Upstream = "https://github.com/epi2me-labs/pore-c-py"
 
 [tool.setuptools.dynamic]
-version = { attr = "pore_c_aqb.__version__" }
+version = { attr = "porec_tools.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

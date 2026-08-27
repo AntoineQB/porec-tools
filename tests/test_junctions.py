@@ -1,4 +1,4 @@
-"""The junction-motif analysis behind `pore-c-aqb-junctions`.
+"""The junction-motif analysis behind `porec-junctions`.
 
 This is the command the digest report points at when it says it cannot tell
 whether an enzyme cut. It therefore has to give the right answer on data where
@@ -11,8 +11,8 @@ import random
 import pysam
 import pytest
 
-from pore_c_aqb.enzymes import resolve_enzymes
-from pore_c_aqb.junctions import (
+from porec_tools.enzymes import resolve_enzymes
+from porec_tools.junctions import (
     junction_boundaries,
     main,
     motif_at,

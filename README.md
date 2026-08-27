@@ -1,16 +1,16 @@
-# wf-pore-c_AQB
+# porec-tools
 
 **A modified version of Oxford Nanopore's [`pore-c-py`](https://github.com/epi2me-labs/pore-c-py) / [`wf-pore-c`](https://github.com/epi2me-labs/wf-pore-c), for Pore-C and PacBio CiFi libraries.**
 
-This is not a new pipeline. It is the upstream digest, kept byte-for-byte
-identical where it was already right, with three things fixed that were
-silently costing contacts:
+Not a new pipeline: this is the upstream digest, kept byte-for-byte identical
+where it was already right, with three things fixed that were silently costing
+contacts:
 
 | | Problem | Fix |
 |---|---|---|
-| 1 | `--cutter` accepts one enzyme. Many protocols use two or more, and the second enzyme's junctions are never cut. | `pore-c-aqb digest DpnII,NlaIII` |
-| 2 | The *in silico* digest cuts at every site, including the many the enzyme never cut. This inflates the Hi-C diagonal with contacts that never happened. | `pore-c-aqb merge` |
-| 3 | Nothing tells you which enzymes actually cut your library. | `pore-c-aqb junctions` |
+| 1 | `--cutter` accepts one enzyme. Many protocols use two or more, and the second enzyme's junctions are never cut. | `porec digest DpnII,NlaIII` |
+| 2 | The *in silico* digest cuts at every site, including the many the enzyme never cut. This inflates the Hi-C diagonal with contacts that never happened. | `porec merge` |
+| 3 | Nothing tells you which enzymes actually cut your library. | `porec junctions` |
 
 Plus one reproducibility bug in a dependency, described [below](#a-reproducibility-bug-found-along-the-way).
 
@@ -55,7 +55,7 @@ at each point, and it is the thing to understand before using the tool.
           |
           v
    +---------------------------+
-   |  pore-c-aqb digest        |  cut each read into monomers
+   |  porec digest        |  cut each read into monomers
    |  DpnII,NlaIII             |  <- FIX 1
    +---------------------------+
           |  monomers, still unaligned
@@ -69,7 +69,7 @@ at each point, and it is the thing to understand before using the tool.
           +--------------------------------+
           v                                v
    +---------------------------+   +---------------------------+
-   |  pore-c-aqb merge         |   |  pore-c-aqb junctions     |
+   |  porec merge         |   |  porec junctions     |
    |  undo the false cuts      |   |  which enzymes cut?       |
    |  <- FIX 2                 |   |  <- FIX 3 (read-only)     |
    +---------------------------+   +---------------------------+
@@ -99,13 +99,13 @@ tee "${meta.alias}_out.ns.bam" |
 samtools sort -o "${meta.alias}.cs.bam" -
 ```
 
-So `pore-c-aqb merge` does not go inside that pipe. You run it afterwards, on
+So `porec merge` does not go inside that pipe. You run it afterwards, on
 the `*_out.ns.bam` the workflow already writes:
 
 ```
    wf-pore-c  (digest | fastq | minimap2 | annotate)  ->  SAMPLE_out.ns.bam
                                                                   |
-                                          pore-c-aqb merge  <-----+
+                                          porec merge  <-----+
 ```
 
 Use the **name-sorted** `.ns.bam`, not the coordinate-sorted `.cs.bam`: merging
@@ -117,7 +117,7 @@ coordinate-sorted file rather than reading it wrongly.
 ## Install
 
 ```bash
-pip install git+https://github.com/YOUR-USERNAME/wf-pore-c_AQB.git
+pip install git+https://github.com/YOUR-USERNAME/porec-tools.git
 ```
 
 > **Before the first push**, point the URLs at your own account:
@@ -131,17 +131,17 @@ automatically.
 Three commands are installed:
 
 ```bash
-pore-c-aqb enzymes      # which enzymes can I use?
-pore-c-aqb digest
-pore-c-aqb merge        # also available as pore-c-aqb-merge
-pore-c-aqb junctions    # also available as pore-c-aqb-junctions
+porec enzymes      # which enzymes can I use?
+porec digest
+porec merge        # also available as porec-merge
+porec junctions    # also available as porec-junctions
 ```
 
 For development:
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/wf-pore-c_AQB.git
-cd wf-pore-c_AQB
+git clone https://github.com/YOUR-USERNAME/porec-tools.git
+cd porec-tools
 pip install -e ".[dev]"
 pytest
 ```
@@ -152,12 +152,12 @@ pytest
 
 ```bash
 # 0. find your enzymes, then check what the digest will do with them
-pore-c-aqb enzymes                    # the 3C/Hi-C shortlist
-pore-c-aqb enzymes CATG               # everything cutting CATG
-pore-c-aqb digest DpnII,NlaIII --dry-run
+porec enzymes                    # the 3C/Hi-C shortlist
+porec enzymes CATG               # everything cutting CATG
+porec digest DpnII,NlaIII --dry-run
 
 # 1. digest with both enzymes
-pore-c-aqb digest DpnII,NlaIII reads.bam \
+porec digest DpnII,NlaIII reads.bam \
     --output monomers.bam --stats digest_stats.tsv --threads 8
 
 # 2. align  <-- NOTHING OF THIS TOOL RUNS HERE. Your usual command, unchanged.
@@ -167,13 +167,13 @@ samtools fastq -T '*' monomers.bam \
   | samtools view -b -o aligned.ns.bam        # name-sorted, NOT coordinate
 
 # 3. undo the cuts the enzyme never made, and get contacts  (needs step 2)
-pore-c-aqb merge aligned.ns.bam \
+porec merge aligned.ns.bam \
     --output fragments.tsv.gz \
     --pairs contacts.pairs --sizes hg38.sizes.genome \
     --stats merge_stats.json --min-fragments 2
 
 # 4. (diagnostic, needs step 2) which enzymes actually cut?
-pore-c-aqb junctions aligned.ns.bam ref.fa --enzymes DpnII,NlaIII,HindIII
+porec junctions aligned.ns.bam ref.fa --enzymes DpnII,NlaIII,HindIII
 ```
 
 ---
@@ -236,12 +236,12 @@ Soft-clipping falls by 96%. Those clipped bases *were* the second locus.
 
 ### Which enzymes can I use?
 
-Any of the 729 Biopython knows a cut position for. `pore-c-aqb enzymes` shows
+Any of the 729 Biopython knows a cut position for. `porec enzymes` shows
 the ones that actually turn up in 3C protocols, and searches the rest by name
 or by recognition site:
 
 ```
-$ pore-c-aqb enzymes
+$ porec enzymes
   enzyme   site      cut (both strands)  sticky end  1 site per  recognition
   DpnII    GATC      N^GATC_N            5' GATC     256 bp      palindromic
   MboI     GATC      N^GATC_N            5' GATC     256 bp      palindromic
@@ -250,9 +250,9 @@ $ pore-c-aqb enzymes
   ...
   NotI     GCGGCCGC  GC^GGCC_GC          5' GGCC     65,536 bp   palindromic
 
-$ pore-c-aqb enzymes CATG      # by site
-$ pore-c-aqb enzymes Dpn       # by name
-$ pore-c-aqb enzymes --all     # all 729
+$ porec enzymes CATG      # by site
+$ porec enzymes Dpn       # by name
+$ porec enzymes --all     # all 729
 ```
 
 The 334 enzymes with no defined cut position and the 25 that cut twice are left
@@ -319,7 +319,7 @@ a site land next to each other on the genome, the site was never cut. That is
 why this is a separate step, run on aligned monomers.
 
 ```bash
-pore-c-aqb merge aligned.ns.bam --output fragments.tsv.gz \
+porec merge aligned.ns.bam --output fragments.tsv.gz \
     --pairs contacts.pairs --sizes hg38.sizes.genome --min-fragments 2
 ```
 
@@ -382,7 +382,7 @@ enzyme cut, its motif sits at those boundaries far more often than at random
 positions on the same chromosomes:
 
 ```bash
-pore-c-aqb junctions aligned.ns.bam ref.fa --enzymes DpnII,NlaIII,HindIII,HinfI
+porec junctions aligned.ns.bam ref.fa --enzymes DpnII,NlaIII,HindIII,HinfI
 ```
 
 ```
@@ -410,10 +410,10 @@ DpnII to ~79% but inflates the random background too.
 Every option of every command. `--help` on any of them prints the same, with
 more explanation.
 
-### `pore-c-aqb enzymes`, what can I digest with?
+### `porec enzymes`, what can I digest with?
 
 ```
-pore-c-aqb enzymes [QUERY] [--all]
+porec enzymes [QUERY] [--all]
 
   QUERY          A name fragment ('Dpn') or a recognition site ('GATC').
                  Searching implies --all.
@@ -422,14 +422,14 @@ pore-c-aqb enzymes [QUERY] [--all]
 
 *Entirely new, no upstream equivalent.*
 
-### `pore-c-aqb digest`, cut reads into monomers (unaligned input)
+### `porec digest`, cut reads into monomers (unaligned input)
 
 Drop-in for `pore-c-py digest`: every upstream option is accepted with the same
 meaning, and both positional orders work, because wf-pore-c uses both.
 
 ```
-pore-c-aqb digest ENZYME [INPUT ...]   [options]
-pore-c-aqb digest [INPUT ...] ENZYME   [options]      # upstream's order
+porec digest ENZYME [INPUT ...]   [options]
+porec digest [INPUT ...] ENZYME   [options]      # upstream's order
 
   ENZYME               One or more enzyme names. 'DpnII', 'DpnII,NlaIII',
                        'DpnII+NlaIII' all work.
@@ -459,12 +459,12 @@ pore-c-aqb digest [INPUT ...] ENZYME   [options]      # upstream's order
 Also new, without a flag: several enzymes at once, names validated before a
 single read is touched, and a `@PG` provenance line in the output header.
 
-### `pore-c-aqb merge`, undo the false cuts (ALIGNED input)
+### `porec merge`, undo the false cuts (ALIGNED input)
 
 **Runs after alignment.** See [Where it fits](#where-it-fits).
 
 ```
-pore-c-aqb merge ALIGNED_BAM [options]
+porec merge ALIGNED_BAM [options]
 
   ALIGNED_BAM          Aligned monomer BAM, grouped by read name. This is
                        the workflow's *.ns.bam. A coordinate-sorted BAM is
@@ -491,12 +491,12 @@ pore-c-aqb merge ALIGNED_BAM [options]
 
 *Entirely new, no upstream equivalent.*
 
-### `pore-c-aqb junctions`, which enzymes actually cut? (ALIGNED input)
+### `porec junctions`, which enzymes actually cut? (ALIGNED input)
 
 Runs after alignment, and writes nothing: it only reads.
 
 ```
-pore-c-aqb junctions ALIGNED_BAM REFERENCE --enzymes LIST [options]
+porec junctions ALIGNED_BAM REFERENCE --enzymes LIST [options]
 
   ALIGNED_BAM          Name-sorted aligned monomer BAM.
   REFERENCE            Indexed reference FASTA (.fai required).
@@ -536,7 +536,7 @@ pore-c-py digest "${meta.cutter}" ...                     # chunked: stdin
 pore-c-py digest "concatemers.bam" "${meta.cutter}" ...   # not chunked
 ```
 
-`pore-c-aqb` accepts either order, and implements the `--max_monomers`,
+`porec` accepts either order, and implements the `--max_monomers`,
 `--excluded_list`, `--excluded_bam`, `--recursive` and `--glob` options the
 workflow passes. Patching one branch, or dropping those options, leaves the
 workflow broken on one of its two paths.
@@ -557,7 +557,7 @@ in something nobody thought to list still fails.
 
 Validated on **16,758 real PacBio 3C reads, 259,214 monomers**, of which
 203,342 carry base-modification tags: zero differences. The MM/ML
-recomputation is vendored verbatim from upstream (`src/pore_c_aqb/_vendored.py`)
+recomputation is vendored verbatim from upstream (`src/porec_tools/_vendored.py`)
 so that this holds.
 
 > Pin the image, not the package name. The standalone `ontresearch/pore-c-py`
@@ -611,7 +611,7 @@ never aligns. Rare (2 cases in 350 pairs built to hit boundaries, 0 in 2,400
 random sequences), but deterministic: the same BAM gives different monomer
 counts on two machines, which a tool meant to be cited cannot do.
 
-`src/pore_c_aqb/sites.py` therefore locates sites itself for palindromic
+`src/porec_tools/sites.py` therefore locates sites itself for palindromic
 enzymes, which covers every enzyme used in 3C/Hi-C, under one documented rule. Verified
 over **2,400 comparisons across 20 palindromic enzymes: zero disagreements**,
 and 634,479 identical monomers from the same real library under both versions.
@@ -635,8 +635,8 @@ message: 334 with no defined cut position, 25 that cut twice.
 | | time | throughput |
 |---|---:|---:|
 | `pore-c-py digest DpnII` (upstream, in its container) | 42.3 s | 395 reads/s |
-| `pore-c-aqb digest DpnII` | 39.9 s | 420 reads/s |
-| `pore-c-aqb digest DpnII,NlaIII` | 60.8 s | 275 reads/s |
+| `porec digest DpnII` | 39.9 s | 420 reads/s |
+| `porec digest DpnII,NlaIII` | 60.8 s | 275 reads/s |
 
 No regression against upstream. A second enzyme costs about 50% more, split
 between the extra site search and the 2.4x larger output. The digest is not the

@@ -6,8 +6,8 @@ import pytest
 from Bio import Restriction
 from Bio.Seq import Seq
 
-from pore_c_aqb.digest import DigestStats, digest_sequence, find_cut_points
-from pore_c_aqb.enzymes import resolve_enzymes
+from porec_tools.digest import DigestStats, digest_sequence, find_cut_points
+from porec_tools.enzymes import resolve_enzymes
 
 from conftest import make_read, random_seq
 
@@ -156,7 +156,7 @@ def test_shared_cut_point_counted_once():
     stats = DigestStats()
     # DpnII and MboI are isoschizomers; resolve_enzymes collapses them, so
     # build the degenerate case by hand to exercise the accounting.
-    from pore_c_aqb.enzymes import _resolve_one
+    from porec_tools.enzymes import _resolve_one
     enzymes = [_resolve_one("DpnII"), _resolve_one("MboI")]
     seq = "TTTT" + "GATC" + "TTTT"
     cuts = find_cut_points(seq, enzymes, stats)
@@ -182,7 +182,7 @@ def test_random_sequences_tile_exactly(seed):
 
 
 def test_expected_spacing_matches_site_complexity():
-    from pore_c_aqb.report import expected_site_spacing
+    from porec_tools.report import expected_site_spacing
     assert expected_site_spacing("GATC") == 256        # 4^4
     assert expected_site_spacing("AAGCTT") == 4096     # 4^6
     assert expected_site_spacing("GANTC") == 256       # N is free

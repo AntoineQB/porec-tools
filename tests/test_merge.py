@@ -11,8 +11,8 @@ import json
 import pysam
 import pytest
 
-from pore_c_aqb.merge import Fragment, main, merge_adjacent
-from pore_c_aqb.reads import iter_concatemers
+from porec_tools.merge import Fragment, main, merge_adjacent
+from porec_tools.reads import iter_concatemers
 
 CHROMS = {"chr1": 300000, "chr2": 300000}
 

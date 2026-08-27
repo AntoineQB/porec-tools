@@ -1,4 +1,4 @@
-wf-pore-c_AQB / pore-c-aqb
+porec-tools / porec
 ==========================
 
 This work is derived from pore-c-py 2.0.6
@@ -17,7 +17,7 @@ Note that it restricts use to "Research Purposes" as defined in clause 1.10.
 
 Files taken from upstream
 -------------------------
-src/pore_c_aqb/_vendored.py
+src/porec_tools/_vendored.py
     get_subread_modified_bases()  -- verbatim from pore_c_py/digest.py
     splits_to_intervals()         -- verbatim from pore_c_py/digest.py
     set_monomer_data()            -- verbatim from pore_c_py/utils.py
@@ -26,7 +26,7 @@ src/pore_c_aqb/_vendored.py
     Reproduced unchanged so that single-enzyme output stays byte-identical to
     upstream. tests/test_equivalence.py enforces this.
 
-src/pore_c_aqb/digest.py
+src/porec_tools/digest.py
     digest_sequence() and get_concatemer_seqs() follow the structure of
     pore_c_py.digest, with the changes listed below.
 
@@ -38,36 +38,36 @@ Changes made
    of one. Cut points are the sorted union of each enzyme's sites, de-duplicated
    (a position cut by two enzymes is one cut in the tube).
 
-2. Version-independent site location  [src/pore_c_aqb/sites.py, new]
+2. Version-independent site location  [src/porec_tools/sites.py, new]
    Bio.Restriction.search() changed its answer at sequence boundaries between
    biopython 1.82 and 1.88, making the digest irreproducible across
    environments. Sites of palindromic enzymes are now located here under one
    documented rule. Non-palindromic (Type IIS) enzymes are still delegated to
    Biopython.
 
-3. Enzyme validation  [src/pore_c_aqb/enzymes.py, new]
+3. Enzyme validation  [src/porec_tools/enzymes.py, new]
    All names are resolved and checked before any read is processed, with
    close-match suggestions on typos. Isoschizomers (DpnII/MboI) are collapsed.
    Enzymes that cut twice, or have no defined cut position, are rejected.
 
-4. Per-enzyme site statistics  [DigestStats, src/pore_c_aqb/report.py, new]
+4. Per-enzyme site statistics  [DigestStats, src/porec_tools/report.py, new]
    Reports how many recognition sites each enzyme has in the reads, its share
    of the cut points, and the observed site spacing beside the spacing expected
    by chance. Written to stderr and, with --stats, to TSV. The report states
    explicitly that a site count is not evidence an enzyme cut.
 
-5. Enzyme table before the digest  [src/pore_c_aqb/report.py, new]
+5. Enzyme table before the digest  [src/porec_tools/report.py, new]
    Site, cut position drawn on both strands, sticky end and expected site
    spacing, shown before any data is read and on its own with --dry-run.
 
-6. Junction motif analysis  [src/pore_c_aqb/junctions.py, new]
-   Standalone command `pore-c-aqb-junctions`. Measures each enzyme's motif
+6. Junction motif analysis  [src/porec_tools/junctions.py, new]
+   Standalone command `porec-junctions`. Measures each enzyme's motif
    enrichment at ligation junctions in aligned monomers against a random
    background, which is the test of whether an enzyme actually cut. Not derived
    from upstream code.
 
-7. Merging of falsely split fragments  [src/pore_c_aqb/merge.py, new]
-   Standalone command `pore-c-aqb merge`. The in silico digest cuts at every
+7. Merging of falsely split fragments  [src/porec_tools/merge.py, new]
+   Standalone command `porec merge`. The in silico digest cuts at every
    recognition site, including the many that the enzyme did not cut in vitro,
    which inflates the Hi-C diagonal with contacts that never happened. This
    merges monomers that are consecutive along the read and contiguous on the
@@ -86,10 +86,10 @@ Changes made
    than trimmed.
 
 9. Enzyme catalogue  [iter_usable, report.list_enzymes, new]
-   `pore-c-aqb enzymes` lists and searches the enzymes the digest accepts.
+   `porec enzymes` lists and searches the enzymes the digest accepts.
    Not derived from upstream code.
 
-10. Progress reporting  [src/pore_c_aqb/progress.py, new]
+10. Progress reporting  [src/porec_tools/progress.py, new]
     A dependency-free progress bar for the long-running commands. Percentage
     and ETA come from the BGZF virtual offset of the input BAM. Not derived
     from upstream code.
@@ -98,5 +98,5 @@ Changes made
    A @PG line recording the tool, version, command line and enzyme list is
    added to the output BAM header.
 
-12. Command-line interface  [src/pore_c_aqb/cli.py, new]
+12. Command-line interface  [src/porec_tools/cli.py, new]
    Argument-compatible with `pore-c-py digest`; adds --stats and --dry-run.

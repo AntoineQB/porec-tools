@@ -4,7 +4,7 @@ This is the load-bearing test of the whole project. The claim being made is:
 
     with one enzyme, this tool produces exactly what pore-c-py produces.
 
-If that holds, then a user switching to ``pore-c-aqb`` risks nothing, and the
+If that holds, then a user switching to ``porec`` risks nothing, and the
 multi-enzyme behaviour is a strict extension rather than a reimplementation.
 
 Two levels of checking:
@@ -36,9 +36,9 @@ import pytest
 from Bio import Restriction
 from Bio.Seq import Seq
 
-from pore_c_aqb import _vendored
-from pore_c_aqb.digest import digest_sequence
-from pore_c_aqb.enzymes import resolve_enzymes
+from porec_tools import _vendored
+from porec_tools.digest import digest_sequence
+from porec_tools.enzymes import resolve_enzymes
 
 from conftest import make_read, random_seq, write_bam
 
@@ -228,7 +228,7 @@ def test_matches_upstream_container_with_modified_bases(tmp_path: Path, enzyme):
 
     ours = tmp_path / "ours.bam"
     subprocess.run(
-        [sys.executable, "-m", "pore_c_aqb.cli", "digest", enzyme, in_bam,
+        [sys.executable, "-m", "porec_tools.cli", "digest", enzyme, in_bam,
          "--output", str(ours), "--quiet"],
         check=True, capture_output=True)
     theirs = _run_upstream(tmp_path, in_bam, enzyme)
@@ -255,7 +255,7 @@ def test_matches_upstream_container(tmp_path: Path, enzyme):
 
     ours = tmp_path / "ours.bam"
     subprocess.run(
-        [sys.executable, "-m", "pore_c_aqb.cli", "digest", enzyme, in_bam,
+        [sys.executable, "-m", "porec_tools.cli", "digest", enzyme, in_bam,
          "--output", str(ours), "--quiet"],
         check=True, capture_output=True)
 

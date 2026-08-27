@@ -5,8 +5,8 @@ import pytest
 from Bio import Restriction
 from Bio.Seq import Seq
 
-from pore_c_aqb.enzymes import _resolve_one
-from pore_c_aqb.sites import IUPAC_CLASSES, find_cuts_for_enzyme, site_regex
+from porec_tools.enzymes import _resolve_one
+from porec_tools.sites import IUPAC_CLASSES, find_cuts_for_enzyme, site_regex
 
 from conftest import random_seq
 
@@ -107,7 +107,7 @@ def test_iupac_table_covers_every_usable_enzyme():
     twice) are excluded: they never reach the scanner. HpyUM037X for instance
     has site 'TNGGNAG|GTGGNAG' and fst5 = None.
     """
-    from pore_c_aqb.enzymes import EnzymeSpecError, _resolve_one
+    from porec_tools.enzymes import EnzymeSpecError, _resolve_one
     used, n_ok = set(), 0
     for name in dir(Restriction):
         if name.startswith("_"):
@@ -125,7 +125,7 @@ def test_iupac_table_covers_every_usable_enzyme():
 
 def test_enzyme_with_alternative_sites_is_rejected():
     """HpyUM037X has two recognition sequences and no single cut position."""
-    from pore_c_aqb.enzymes import EnzymeSpecError, _resolve_one
+    from porec_tools.enzymes import EnzymeSpecError, _resolve_one
     with pytest.raises(EnzymeSpecError):
         _resolve_one("HpyUM037X")
 

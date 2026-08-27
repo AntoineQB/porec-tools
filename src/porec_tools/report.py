@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from pore_c_aqb.enzymes import ResolvedEnzyme
+from porec_tools.enzymes import ResolvedEnzyme
 
 __all__ = [
     "expected_site_spacing",
@@ -53,7 +53,7 @@ def expected_site_spacing(site: str) -> float:
     divides it by 4 / (number of bases it allows), so GANTC gives 256 rather
     than 1024, because the N is free.
     """
-    from pore_c_aqb.sites import IUPAC_CLASSES
+    from porec_tools.sites import IUPAC_CLASSES
 
     spacing = 1.0
     for char in site.upper():
@@ -201,7 +201,7 @@ def format_report(stats, enzymes: Sequence[ResolvedEnzyme]) -> list[str]:
 
 def list_enzymes(query: str | None = None, common_only: bool = True) -> list[str]:
     """The catalogue, as lines ready to print."""
-    from pore_c_aqb.enzymes import iter_usable
+    from porec_tools.enzymes import iter_usable
 
     found = list(iter_usable(query, common_only=common_only))
     if not found:

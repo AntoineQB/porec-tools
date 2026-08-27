@@ -4,7 +4,7 @@
 
 The digest names each monomer ``<read>:<start>:<end>`` and tags it with ``MI``
 (the concatemer it came from) and ``Xc`` (where it sat along that read). Both
-:mod:`pore_c_aqb.merge` and :mod:`pore_c_aqb.junctions` need the same thing:
+:mod:`porec_tools.merge` and :mod:`porec_tools.junctions` need the same thing:
 the monomers of one concatemer, in the order they appeared along the read.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ import pysam
 __all__ = ["read_span", "read_order_key", "concatemer_id", "open_bam",
            "iter_concatemers"]
 
-logger = logging.getLogger("pore-c-aqb")
+logger = logging.getLogger("porec")
 
 #: what read_span returns when a monomer's place along the read is unknown
 UNKNOWN_SPAN = (-1, -1)
@@ -132,7 +132,7 @@ def iter_concatemers(bam_path: str, require_sorted: bool = True,
                     "%s: no Xc tag and no ':start:end' in the read names, so "
                     "the position of each monomer along its read is unknown. "
                     "Falling back to the order records appear in the file. "
-                    "Is this BAM really from 'pore-c-aqb digest'?", bam_path)
+                    "Is this BAM really from 'porec digest'?", bam_path)
             buffer.append((start, index, aln))
         if current is not None:
             yield current, ordered(buffer)

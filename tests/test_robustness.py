@@ -14,12 +14,12 @@ import contextlib
 import pysam
 import pytest
 
-from pore_c_aqb.cli import main as cli
-from pore_c_aqb.digest import digest_sequence, find_cut_points
-from pore_c_aqb.enzymes import resolve_enzymes
-from pore_c_aqb.junctions import main as junctions_main
-from pore_c_aqb.merge import main as merge_main
-from pore_c_aqb.reads import iter_concatemers, read_span, UNKNOWN_SPAN
+from porec_tools.cli import main as cli
+from porec_tools.digest import digest_sequence, find_cut_points
+from porec_tools.enzymes import resolve_enzymes
+from porec_tools.junctions import main as junctions_main
+from porec_tools.merge import main as merge_main
+from porec_tools.reads import iter_concatemers, read_span, UNKNOWN_SPAN
 
 from conftest import make_read, write_bam
 

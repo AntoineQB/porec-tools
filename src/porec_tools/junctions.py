@@ -25,7 +25,7 @@ and trimming artefacts, not clean cut sites.
 
 Usage
 -----
-    pore-c-aqb-junctions monomers.aligned.ns.bam ref.fa \\
+    porec-junctions monomers.aligned.ns.bam ref.fa \\
         --enzymes DpnII,NlaIII,HindIII
 
 The BAM must be name-sorted (as produced by the workflow) so that monomers of
@@ -40,15 +40,15 @@ import sys
 
 import pysam
 
-from pore_c_aqb import __version__
-from pore_c_aqb.enzymes import EnzymeSpecError, resolve_enzymes
-from pore_c_aqb.progress import (  # noqa: F401
+from porec_tools import __version__
+from porec_tools.enzymes import EnzymeSpecError, resolve_enzymes
+from porec_tools.progress import (  # noqa: F401
     Progress,
     add_progress_arguments,
     progress_enabled,
 )
-from pore_c_aqb.reads import iter_concatemers, read_order_key  # noqa: F401
-from pore_c_aqb.sites import site_regex
+from porec_tools.reads import iter_concatemers, read_order_key  # noqa: F401
+from porec_tools.sites import site_regex
 
 
 def junction_boundaries(bam_path: str, mapq: int, min_jump: int):
@@ -92,7 +92,7 @@ def main(argv=None) -> int:
         description=__doc__.split("Usage")[0],
         formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument(
-        "--version", action="version", version=f"pore-c-aqb {__version__}")
+        "--version", action="version", version=f"porec {__version__}")
     p.add_argument("bam", help="Name-sorted aligned monomer BAM.")
     p.add_argument("reference", help="Indexed reference FASTA (.fai needed).")
     p.add_argument("--enzymes", required=True,

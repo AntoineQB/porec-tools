@@ -10,7 +10,7 @@ import time
 
 import pytest
 
-from pore_c_aqb.progress import (
+from porec_tools.progress import (
     Progress,
     add_progress_arguments,
     progress_enabled,

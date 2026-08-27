@@ -7,9 +7,9 @@ exist to keep that from coming back.
 """
 import pytest
 
-from pore_c_aqb.digest import DigestStats, find_cut_points
-from pore_c_aqb.enzymes import iter_usable, resolve_enzymes
-from pore_c_aqb.report import (
+from porec_tools.digest import DigestStats, find_cut_points
+from porec_tools.enzymes import iter_usable, resolve_enzymes
+from porec_tools.report import (
     describe_cut,
     describe_overhang,
     enzyme_table,

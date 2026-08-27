@@ -1,7 +1,7 @@
 """Enzyme parsing, resolution and validation."""
 import pytest
 
-from pore_c_aqb.enzymes import (
+from porec_tools.enzymes import (
     EnzymeSpecError,
     describe_enzymes,
     parse_enzyme_spec,

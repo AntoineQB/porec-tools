@@ -6,17 +6,17 @@ DpnII + HinfI) therefore leave the junctions of the second enzyme undigested:
 the affected monomer spans two loci, aligns to one, and the rest is
 soft-clipped away. The contact is lost silently.
 
-This swaps the digest for `pore-c-aqb digest`, which takes a comma-separated
+This swaps the digest for `porec digest`, which takes a comma-separated
 list and cuts at the union of the sites, and documents the list form in the
 schema. With a single enzyme the output is byte-identical to before.
 
 Note that `digest_align_annotate` calls the digest twice - once per chunking
 branch, and with the positional arguments in a different order each time
 (`digest "$cutter"` reading stdin, and `digest concatemers.bam "$cutter"`).
-Both are patched, and pore-c-aqb accepts either order.
+Both are patched, and porec accepts either order.
 
-Requires pore-c-aqb in the process container:
-    pip install git+https://github.com/YOUR-USERNAME/wf-pore-c_AQB.git
+Requires porec in the process container:
+    pip install git+https://github.com/YOUR-USERNAME/porec-tools.git
 
 Generated against epi2me-labs/wf-pore-c master; verified with `git apply`.
 
@@ -30,7 +30,7 @@ index b545cde..8709cfe 100644
              echo "${chunk_ref}"
              bamindex fetch --chunk=${chunk_index} "concatemers.bam" |
 -                pore-c-py digest "${meta.cutter}" --max_monomers ${params.max_monomers} --excluded_list "filtered_reads.txt" \
-+                pore-c-aqb digest "${meta.cutter}" --max_monomers ${params.max_monomers} --excluded_list "filtered_reads.txt" \
++                porec digest "${meta.cutter}" --max_monomers ${params.max_monomers} --excluded_list "filtered_reads.txt" \
                  --header "concatemers.bam" \
                  --threads ${digest_annotate_threads} |
              samtools fastq --threads 1 -T '*' |
@@ -39,7 +39,7 @@ index b545cde..8709cfe 100644
          }else{
              """
 -            pore-c-py digest "concatemers.bam" "${meta.cutter}" --max_monomers ${params.max_monomers} --excluded_list "filtered_reads.txt" \
-+            pore-c-aqb digest "concatemers.bam" "${meta.cutter}" --max_monomers ${params.max_monomers} --excluded_list "filtered_reads.txt" \
++            porec digest "concatemers.bam" "${meta.cutter}" --max_monomers ${params.max_monomers} --excluded_list "filtered_reads.txt" \
                  --header "concatemers.bam" \
                  --threads ${digest_annotate_threads} | 
              samtools fastq --threads 1 -T '*' |

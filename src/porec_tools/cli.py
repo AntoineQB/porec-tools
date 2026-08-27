@@ -5,8 +5,8 @@
 The only difference is that the positional ``enzyme`` argument accepts several
 names, so an existing wf-pore-c invocation keeps working unchanged:
 
-    pore-c-aqb digest DpnII        input.bam --output monomers.bam
-    pore-c-aqb digest DpnII,NlaIII input.bam --output monomers.bam
+    porec digest DpnII        input.bam --output monomers.bam
+    porec digest DpnII,NlaIII input.bam --output monomers.bam
 """
 from __future__ import annotations
 
@@ -18,15 +18,15 @@ from pathlib import Path
 
 import pysam
 
-from pore_c_aqb import __version__
-from pore_c_aqb.digest import DigestStats, get_concatemer_seqs
-from pore_c_aqb.enzymes import (
+from porec_tools import __version__
+from porec_tools.digest import DigestStats, get_concatemer_seqs
+from porec_tools.enzymes import (
     EnzymeSpecError,
     describe_enzymes,
     resolve_enzymes,
 )
-from pore_c_aqb.progress import add_progress_arguments, bam_progress
-from pore_c_aqb.report import (
+from porec_tools.progress import add_progress_arguments, bam_progress
+from porec_tools.report import (
     describe_cut,
     describe_overhang,
     enzyme_table,
@@ -34,7 +34,7 @@ from pore_c_aqb.report import (
     list_enzymes,
 )
 
-PROG = "pore-c-aqb"
+PROG = "porec"
 logger = logging.getLogger(PROG)
 
 
@@ -47,9 +47,9 @@ def _build_parser() -> argparse.ArgumentParser:
             "and tells you which enzymes actually cut your library."
         ),
         epilog=(
-            "  pore-c-aqb digest DpnII,NlaIII reads.bam --output mono.bam\n"
-            "  pore-c-aqb merge aligned.ns.bam --output fragments.tsv.gz\n"
-            "  pore-c-aqb junctions aligned.ns.bam ref.fa --enzymes "
+            "  porec digest DpnII,NlaIII reads.bam --output mono.bam\n"
+            "  porec merge aligned.ns.bam --output fragments.tsv.gz\n"
+            "  porec junctions aligned.ns.bam ref.fa --enzymes "
             "DpnII,NlaIII\n"
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -126,10 +126,10 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "EXAMPLES\n"
-            "  pore-c-aqb enzymes            the ones used in 3C/Hi-C\n"
-            "  pore-c-aqb enzymes --all      all 729 usable ones\n"
-            "  pore-c-aqb enzymes GATC       every enzyme cutting GATC\n"
-            "  pore-c-aqb enzymes Dpn        every name containing 'Dpn'\n"))
+            "  porec enzymes            the ones used in 3C/Hi-C\n"
+            "  porec enzymes --all      all 729 usable ones\n"
+            "  porec enzymes GATC       every enzyme cutting GATC\n"
+            "  porec enzymes Dpn        every name containing 'Dpn'\n"))
     e.add_argument(
         "query", nargs="?", default=None,
         help=("A name fragment ('Dpn') or a recognition site ('GATC'). "
@@ -352,15 +352,15 @@ def main(argv: list[str] | None = None) -> int:
     # merge and junctions own their (long) help text, so hand the rest of the
     # command line straight to them rather than re-declaring it here
     if argv and argv[0] == "merge":
-        from pore_c_aqb.merge import main as merge_main
+        from porec_tools.merge import main as merge_main
         return merge_main(argv[1:])
     if argv and argv[0] == "junctions":
-        from pore_c_aqb.junctions import main as junctions_main
+        from porec_tools.junctions import main as junctions_main
         return junctions_main(argv[1:])
 
     parser = _build_parser()
     if not argv:
-        # bare "pore-c-aqb": show what the tool is for, not just a usage line.
+        # bare "porec": show what the tool is for, not just a usage line.
         # Someone typing the name alone is asking "what is this?"
         parser.print_help()
         return 1

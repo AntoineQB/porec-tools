@@ -1,21 +1,16 @@
 # porec-tools
 
-**A modified version of Oxford Nanopore's [`pore-c-py`](https://github.com/epi2me-labs/pore-c-py) / [`wf-pore-c`](https://github.com/epi2me-labs/wf-pore-c), for Pore-C and PacBio CiFi libraries.**
+**A modified version of [`pore-c-py`](https://github.com/epi2me-labs/pore-c-py) / [`wf-pore-c`](https://github.com/epi2me-labs/wf-pore-c), for Pore-C and PacBio CiFi libraries.**
 
-Not a new pipeline: this is the upstream digest, kept byte-for-byte identical
-where it was already right, with three things fixed that were silently costing
-contacts:
+This is not a new pipeline, but rather a modification of w[`wf-pore-c`](https://github.com/epi2me-labs/wf-pore-c), to add the option of a multi-enzyme digestion, and to fix some problems that were costing some contacts at the end.
 
 | | Problem | Fix |
 |---|---|---|
-| 1 | `--cutter` accepts one enzyme. Many protocols use two or more, and the second enzyme's junctions are never cut. | `porec digest DpnII,NlaIII` |
-| 2 | The *in silico* digest cuts at every site, including the many the enzyme never cut. This inflates the Hi-C diagonal with contacts that never happened. | `porec merge` |
-| 3 | Nothing tells you which enzymes actually cut your library. | `porec junctions` |
+| 1 | `--cutter` accepts one enzyme. Some protocols use two or more. | `porec digest DpnII,NlaIII` |
+| 2 | The *in silico* digest cuts at every site, including the many the enzyme never cut in reality. This inflates the Hi-C diagonal with contacts that never happened. | `porec merge` |
+| 3 | No option exist to actually test which enzyme were used for the digestion, in case you're not sure. | `porec junctions` |
 
 Plus one reproducibility bug in a dependency, described [below](#a-reproducibility-bug-found-along-the-way).
-
-With a single enzyme, the digest output is identical to upstream. It is verified
-record by record, tag by tag, against the real tool. See [Correctness](#correctness).
 
 <details>
 <summary><b>Everything that changed, at a glance</b></summary>
@@ -23,13 +18,10 @@ record by record, tag by tag, against the real tool. See [Correctness](#correctn
 | Change | Where | Runs on |
 |---|---|---|
 | `--cutter` takes a list of enzymes; cut points are their union | `digest` | unaligned |
-| Enzyme names validated up front, with typo suggestions | `digest` | either |
 | Enzymes with no defined cut (334) or that cut twice (25) rejected, not mis-digested | `digest` | either |
-| Site search made independent of the Biopython version | `digest` | either |
 | `--stats` : per-enzyme site report, as TSV | `digest` | either |
 | `--dry-run` : show what each enzyme will do, reading no data | `digest` | either |
 | `@PG` provenance line in the output BAM header | `digest` | either |
-| Both positional orders accepted (`ENZYME INPUT` and `INPUT ENZYME`) | `digest` | either |
 | `--max_monomers`, `--excluded_list`, `--excluded_bam`, `--recursive`, `--glob` implemented, as the workflow passes them | `digest` | either |
 | **New command:** merge fragments the enzyme never cut, write 4DN `.pairs` | `merge` | **aligned** |
 | **New command:** motif enrichment at ligation junctions | `junctions` | **aligned** |
@@ -46,9 +38,7 @@ and every change made to it.
 
 ## Where it fits
 
-Two of the three fixes act on **unaligned** reads, one on **aligned** ones.
-That split is not a design preference. It is forced by what information exists
-at each point, and it is the thing to understand before using the tool.
+Two of the three fixes act on **unaligned** reads, one on **aligned** ones.<br>
 
 ```
    concatemers.bam   (unaligned reads, straight off the sequencer)
@@ -69,21 +59,21 @@ at each point, and it is the thing to understand before using the tool.
           +--------------------------------+
           v                                v
    +---------------------------+   +---------------------------+
-   |  porec merge         |   |  porec junctions     |
-   |  undo the false cuts      |   |  which enzymes cut?       |
-   |  <- FIX 2                 |   |  <- FIX 3 (read-only)     |
+   |       porec merge         |   |      porec junctions      |
+   |    undo the false cuts    |   |     which enzymes cut?    |
+   |          FIX 2            |   |     FIX/ADD 3 (read-only) |
    +---------------------------+   +---------------------------+
           |  fragments.tsv.gz + contacts.pairs
           v
       cooler / juicer
 ```
 
-**Why the line falls there.** In an unaligned read, a `GATC` that the enzyme
-never cut and a `GATC` rebuilt by ligation are the same four letters. Nothing
-distinguishes them. Only once each monomer has a genomic position can you see
+**Why you need to align the reads to undo the false cuts** <br>
+In an unaligned read, a `GATC` that the enzymenever cut and a `GATC` rebuilt by ligation are the same four letters. <br>
+Nothing distinguishes them. Only once each monomer has a genomic position can you see
 that two of them land side by side, which means the site between them was
-never cut. So `merge` and `junctions` *cannot* run before alignment, and
-`digest` cannot wait for it.
+never cut.<br> 
+So `merge` and `junctions` *cannot* run before alignment, and `digest` cannot wait for it.
 
 ### Where does alignment happen in wf-pore-c?
 
@@ -103,9 +93,8 @@ So `porec merge` does not go inside that pipe. You run it afterwards, on
 the `*_out.ns.bam` the workflow already writes:
 
 ```
-   wf-pore-c  (digest | fastq | minimap2 | annotate)  ->  SAMPLE_out.ns.bam
-                                                                  |
-                                          porec merge  <-----+
+   wf-pore-c  (digest | fastq | minimap2 | annotate)  ->  SAMPLE_out.ns.bam  ---> porec merge                         
+                                      
 ```
 
 Use the **name-sorted** `.ns.bam`, not the coordinate-sorted `.cs.bam`: merging
@@ -120,8 +109,7 @@ coordinate-sorted file rather than reading it wrongly.
 pip install git+https://github.com/AntoineQB/porec-tools.git
 ```
 
-Needs Python >= 3.8, `pysam` and `biopython`. The last two are pulled in
-automatically.
+Needs Python >= 3.8, `pysam` and `biopython`. 
 Three commands are installed:
 
 ```bash
@@ -154,19 +142,19 @@ porec digest DpnII,NlaIII --dry-run
 porec digest DpnII,NlaIII reads.bam \
     --output monomers.bam --stats digest_stats.tsv --threads 8
 
-# 2. align  <-- NOTHING OF THIS TOOL RUNS HERE. Your usual command, unchanged.
-#              Everything below needs the genomic positions it produces.
+# 2. align  <-- Usual command, unchanged.
+#               Everything below needs the genomic positions it produces.
 samtools fastq -T '*' monomers.bam \
   | minimap2 -ay -x map-hifi ref.fa - \
   | samtools view -b -o aligned.ns.bam        # name-sorted, NOT coordinate
 
-# 3. undo the cuts the enzyme never made, and get contacts  (needs step 2)
+# 3. undo the cuts the enzyme never made, and get contacts
 porec merge aligned.ns.bam \
     --output fragments.tsv.gz \
     --pairs contacts.pairs --sizes hg38.sizes.genome \
     --stats merge_stats.json --min-fragments 2
 
-# 4. (diagnostic, needs step 2) which enzymes actually cut?
+# 4.  which enzymes actually cut?
 porec junctions aligned.ns.bam ref.fa --enzymes DpnII,NlaIII,HindIII
 ```
 
@@ -191,8 +179,6 @@ falls back to a count and a rate rather than inventing a total.
 
 It draws only when stderr is a terminal, so redirecting to a file or a
 Nextflow log stays clean. `--progress` forces it on, `--no-progress` off.
-`--quiet` does *not* silence it: that flag controls logging, and a bar is not a
-log line.
 
 ---
 
@@ -365,11 +351,6 @@ cannot tell a working enzyme from one that never left the freezer, because
 every motif occurs in genomic DNA by chance. `AAGCTT` turns up every ~4 kb
 whatever was in the tube.
 
-> An earlier version of this tool labelled that column "cuts" and printed
-> `HindIII 1,497 cuts (9.2%)` for an enzyme that demonstrably never cut. A user
-> would have concluded that it worked. The column now says **sites found**, prints the chance rate beside the observed one, and states plainly
-> that it is not evidence of cutting.
-
 The test that *does* work needs aligned data. Inside a concatemer, the boundary
 between two monomers that land far apart is a genuine ligation junction. If an
 enzyme cut, its motif sits at those boundaries far more often than at random
@@ -388,10 +369,6 @@ porec junctions aligned.ns.bam ref.fa --enzymes DpnII,NlaIII,HindIII,HinfI
   HindIII    AAGCTT            0.0%        0.1%        0.1x   no
   HinfI      GANTC             1.3%        1.5%        0.9x   no
 ```
-
-That is the run this tool was written for: the protocol notes said HindIII,
-`AAGCTT` sits *below* background at junctions, and the real second enzyme was
-NlaIII. This command changes nothing on disk, it only reads.
 
 Read the enrichment column, not the percentages: aligners soft-clip a few
 bases at monomer ends, so the absolute rates understate. `--tol 10` recovers
@@ -450,9 +427,6 @@ porec digest [INPUT ...] ENZYME   [options]      # upstream's order
   --version                                                            NEW
 ```
 
-Also new, without a flag: several enzymes at once, names validated before a
-single read is touched, and a `@PG` provenance line in the output header.
-
 ### `porec merge`, undo the false cuts (ALIGNED input)
 
 **Runs after alignment.** See [Where it fits](#where-it-fits).
@@ -483,8 +457,6 @@ porec merge ALIGNED_BAM [options]
   --version
 ```
 
-*Entirely new, no upstream equivalent.*
-
 ### `porec junctions`, which enzymes actually cut? (ALIGNED input)
 
 Runs after alignment, and writes nothing: it only reads.
@@ -509,8 +481,6 @@ porec junctions ALIGNED_BAM REFERENCE --enzymes LIST [options]
   --progress / --no-progress
   --version
 ```
-
-*Entirely new, no upstream equivalent.*
 
 ---
 
@@ -588,53 +558,6 @@ wrapped, and that it reports no percentage when it cannot know one.
 ```
 263 tests | 96% coverage | biopython 1.82 and 1.88 | flake8 clean
 ```
-
-### A reproducibility bug found along the way
-
-`Bio.Restriction.search()` changed its behaviour at sequence boundaries:
-
-```python
-NlaIII.search(Seq("CATGCCTTCTGTGCGAGCCC"))
-# biopython 1.82 -> [5]     (the version inside wf-pore-c)
-# biopython 1.88 -> []
-```
-
-1.88 drops sites whose second-strand cut lands exactly on a sequence edge,
-always at position 0 or the very end, always producing a few-base monomer that
-never aligns. Rare (2 cases in 350 pairs built to hit boundaries, 0 in 2,400
-random sequences), but deterministic: the same BAM gives different monomer
-counts on two machines, which a tool meant to be cited cannot do.
-
-`src/porec_tools/sites.py` therefore locates sites itself for palindromic
-enzymes, which covers every enzyme used in 3C/Hi-C, under one documented rule. Verified
-over **2,400 comparisons across 20 palindromic enzymes: zero disagreements**,
-and 634,479 identical monomers from the same real library under both versions.
-
-Non-palindromic Type IIS enzymes (BsrI, AcuI, ...) cut at a *distance* from
-their site; the reverse-strand geometry is fiddly, an early attempt was off by
-2 bases on every one of them, and none is used to build a Hi-C library. They
-are delegated to Biopython rather than shipped on under-tested arithmetic. The
-same approach is used throughout: our own code where it has been checked
-against a reference, Biopython where it has not.
-
-Enzymes Biopython cannot digest safely are rejected up front with a clear
-message: 334 with no defined cut position, 25 that cut twice.
-
----
-
-## Performance
-
-16,758 real 3C reads (mean 4.4 kb), single core, second run of two:
-
-| | time | throughput |
-|---|---:|---:|
-| `pore-c-py digest DpnII` (upstream, in its container) | 42.3 s | 395 reads/s |
-| `porec digest DpnII` | 39.9 s | 420 reads/s |
-| `porec digest DpnII,NlaIII` | 60.8 s | 275 reads/s |
-
-No regression against upstream. A second enzyme costs about 50% more, split
-between the extra site search and the 2.4x larger output. The digest is not the
-bottleneck. Alignment of the same reads takes an order of magnitude longer.
 
 ---
 

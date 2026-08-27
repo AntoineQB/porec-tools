@@ -16,7 +16,7 @@ branch, and with the positional arguments in a different order each time
 Both are patched, and porec accepts either order.
 
 Requires porec in the process container:
-    pip install git+https://github.com/YOUR-USERNAME/porec-tools.git
+    pip install git+https://github.com/AntoineQB/porec-tools.git
 
 Generated against epi2me-labs/wf-pore-c master; verified with `git apply`.
 

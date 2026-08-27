@@ -117,14 +117,8 @@ coordinate-sorted file rather than reading it wrongly.
 ## Install
 
 ```bash
-pip install git+https://github.com/YOUR-USERNAME/porec-tools.git
+pip install git+https://github.com/AntoineQB/porec-tools.git
 ```
-
-> **Before the first push**, point the URLs at your own account:
-> ```bash
-> grep -rl YOUR-USERNAME . --exclude-dir=.git \
->   | xargs sed -i 's/YOUR-USERNAME/your-github-handle/g'
-> ```
 
 Needs Python >= 3.8, `pysam` and `biopython`. The last two are pulled in
 automatically.
@@ -140,7 +134,7 @@ porec junctions    # also available as porec-junctions
 For development:
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/porec-tools.git
+git clone https://github.com/AntoineQB/porec-tools.git
 cd porec-tools
 pip install -e ".[dev]"
 pytest

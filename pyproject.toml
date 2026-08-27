@@ -27,7 +27,7 @@ porec-junctions = "porec_tools.junctions:main"
 porec-merge = "porec_tools.merge:main"
 
 [project.urls]
-Homepage = "https://github.com/YOUR-USERNAME/porec-tools"
+Homepage = "https://github.com/AntoineQB/porec-tools"
 Upstream = "https://github.com/epi2me-labs/pore-c-py"
 
 [tool.setuptools.dynamic]

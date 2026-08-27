@@ -9,23 +9,48 @@ the monomers of one concatemer, in the order they appeared along the read.
 """
 from __future__ import annotations
 
+import logging
+from pathlib import Path
+
 import pysam
 
-__all__ = ["read_order_key", "concatemer_id", "iter_concatemers"]
+__all__ = ["read_span", "read_order_key", "concatemer_id", "open_bam",
+           "iter_concatemers"]
+
+logger = logging.getLogger("pore-c-aqb")
+
+#: what read_span returns when a monomer's place along the read is unknown
+UNKNOWN_SPAN = (-1, -1)
 
 
-def read_order_key(aln) -> int:
-    """Where this monomer starts along its concatemer.
+def read_span(aln) -> tuple[int, int]:
+    """``(start, end)`` of this monomer along its concatemer.
 
     ``Xc`` is the ``(start, end, read_length, index, count)`` tag written by the
     digest. Falling back to the name suffix keeps things working on BAMs whose
     tags were stripped, since monomer names end in ``:<start>:<end>``.
+
+    Returns :data:`UNKNOWN_SPAN` when neither is available - a BAM from some
+    other source. Callers keep the order the records came in, which is the best
+    available guess for a name-grouped file.
     """
     try:
-        return int(aln.get_tag("Xc")[0])
-    except (KeyError, TypeError, IndexError):
-        parts = aln.query_name.rsplit(":", 2)
-        return int(parts[1]) if len(parts) == 3 else 0
+        tag = aln.get_tag("Xc")
+        return int(tag[0]), int(tag[1])
+    except (KeyError, TypeError, IndexError, ValueError):
+        pass
+    parts = aln.query_name.rsplit(":", 2)
+    if len(parts) == 3:
+        try:
+            return int(parts[1]), int(parts[2])
+        except ValueError:
+            pass
+    return UNKNOWN_SPAN
+
+
+def read_order_key(aln) -> int:
+    """Where this monomer starts along its concatemer, or -1 if unknown."""
+    return read_span(aln)[0]
 
 
 def concatemer_id(aln) -> str:
@@ -33,6 +58,18 @@ def concatemer_id(aln) -> str:
     if aln.has_tag("MI"):
         return aln.get_tag("MI")
     return aln.query_name.rsplit(":", 2)[0]
+
+
+def open_bam(path: str):
+    """Open a BAM, failing with a message a user can act on."""
+    if not Path(path).exists():
+        raise SystemExit(f"Input file not found: {path}")
+    try:
+        return pysam.AlignmentFile(str(path), "rb", check_sq=False)
+    except (OSError, ValueError) as exc:
+        raise SystemExit(
+            f"Cannot read {path} as a BAM: {exc}\n"
+            f"Is it really a BAM? 'samtools quickcheck' will tell you.")
 
 
 def iter_concatemers(bam_path: str, require_sorted: bool = True):
@@ -46,7 +83,8 @@ def iter_concatemers(bam_path: str, require_sorted: bool = True):
     break the contiguity, and two genomically adjacent blocks would then look
     like two distinct loci. Filter after merging, on the merged blocks.
     """
-    bam = pysam.AlignmentFile(bam_path, "rb")
+    bam = open_bam(bam_path)
+    warned_unknown = False
     try:
         if require_sorted:
             hd = bam.header.to_dict().get("HD", {})
@@ -59,11 +97,17 @@ def iter_concatemers(bam_path: str, require_sorted: bool = True):
         current = None
         buffer: list = []
         seen: set = set()
-        for aln in bam:
+
+        def ordered(items):
+            """Monomers in read order; file order where that is unknown."""
+            return [a for _, _, a in sorted(
+                items, key=lambda t: (t[0] if t[0] >= 0 else t[1], t[1]))]
+
+        for index, aln in enumerate(bam):
             mi = concatemer_id(aln)
             if mi != current:
                 if current is not None:
-                    yield current, sorted(buffer, key=read_order_key)
+                    yield current, ordered(buffer)
                 if mi in seen:
                     raise SystemExit(
                         f"Concatemer {mi} appears in two separate blocks: the "
@@ -74,8 +118,16 @@ def iter_concatemers(bam_path: str, require_sorted: bool = True):
             if (aln.is_unmapped or aln.is_secondary
                     or aln.is_supplementary):
                 continue
-            buffer.append(aln)
+            start = read_order_key(aln)
+            if start < 0 and not warned_unknown:
+                warned_unknown = True
+                logger.warning(
+                    "%s: no Xc tag and no ':start:end' in the read names, so "
+                    "the position of each monomer along its read is unknown. "
+                    "Falling back to the order records appear in the file. "
+                    "Is this BAM really from 'pore-c-aqb digest'?", bam_path)
+            buffer.append((start, index, aln))
         if current is not None:
-            yield current, sorted(buffer, key=read_order_key)
+            yield current, ordered(buffer)
     finally:
         bam.close()

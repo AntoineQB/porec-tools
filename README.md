@@ -1,115 +1,212 @@
-# wf-pore-c_AQB — multi-enzyme digestion for Pore-C / CiFi
+# wf-pore-c_AQB
 
-`pore-c-py digest` accepts **one** restriction enzyme. Many 3C, Hi-C and
-Pore-C protocols use **two or more** — DpnII + NlaIII, or the Arima kit's
-DpnII + HinfI. Digesting *in silico* with only one of them silently loses
-contacts.
+**A modified version of Oxford Nanopore's [`pore-c-py`](https://github.com/epi2me-labs/pore-c-py) / [`wf-pore-c`](https://github.com/epi2me-labs/wf-pore-c), for Pore-C and PacBio CiFi libraries.**
 
-This package provides `pore-c-aqb digest`, a drop-in replacement that takes a
-list of enzymes and cuts at the union of their sites.
+This is not a new pipeline. It is the upstream digest, kept byte-for-byte
+identical where it was already right, with three things fixed that were
+silently costing contacts:
 
-```bash
-pore-c-aqb digest DpnII        reads.bam --output monomers.bam   # as before
-pore-c-aqb digest DpnII,NlaIII reads.bam --output monomers.bam   # new
+| | Problem | Fix |
+|---|---|---|
+| 1 | `--cutter` accepts **one** enzyme. Many protocols use two or more, and the second enzyme's junctions are never cut. | `pore-c-aqb digest DpnII,NlaIII` |
+| 2 | The *in silico* digest cuts at **every** site, including the many the enzyme never cut. This inflates the Hi-C diagonal with contacts that never happened. | `pore-c-aqb merge` |
+| 3 | Nothing tells you which enzymes actually cut your library. | `pore-c-aqb junctions` |
+
+Plus one reproducibility bug in a dependency, described [below](#a-reproducibility-bug-found-along-the-way).
+
+With a single enzyme, the digest output is **identical to upstream** — verified
+record by record, tag by tag, against the real tool. See [Correctness](#correctness).
+
+---
+
+## Where it fits
+
+```
+   concatemers.bam  (unaligned reads from the sequencer)
+          |
+          v
+   +-----------------------+
+   |  pore-c-aqb digest    |   cut each read into monomers
+   |  DpnII,NlaIII         |   <- FIX 1: several enzymes
+   +-----------------------+
+          |  monomers.bam
+          v
+   +-----------------------+
+   |  minimap2             |   each monomer gets a genomic position
+   +-----------------------+
+          |  aligned.ns.bam
+          +------------------------------+
+          v                              v
+   +-----------------------+   +-----------------------+
+   |  pore-c-aqb merge     |   | pore-c-aqb junctions  |
+   |  undo the false cuts  |   | which enzymes cut?    |
+   |  <- FIX 2             |   | <- FIX 3 (diagnostic) |
+   +-----------------------+   +-----------------------+
+          |  fragments.tsv.gz + contacts.pairs
+          v
+      cooler / juicer
 ```
 
 ---
 
-## Why it matters
+## Install
 
-A concatemer is digested **once**, by every enzyme present in the tube at the
-same time. Its fragments are therefore delimited by the union of all
-recognition sites.
-
-If the workflow is told about only one enzyme, a monomer that internally spans
-a junction made by the *other* enzyme is not split. It contains two distinct
-genomic loci, aligns to only one of them, and the remainder is soft-clipped and
-discarded. **The contact is lost, silently, with no warning anywhere.**
-
-On the dataset that motivated this tool, `GATC` (DpnII) is 30× enriched at
-ligation junctions and `CATG` (NlaIII) 3–4×, while the pipeline had been run
-with `--cutter DpnII` alone. A fifth of the junctions were invisible to the
-digest. `pore-c-aqb-junctions` is the analysis that establishes this from
-aligned data.
-
-## What it reports
-
-**Before reading any data**, `--dry-run` shows what each enzyme will do — both
-strands, so the sticky end is visible:
-
-```
-$ pore-c-aqb digest DpnII,NlaIII --dry-run
-Enzymes resolved from 'DpnII,NlaIII':
-  enzyme  site  cut (both strands)  sticky end  1 site per  recognition
-  DpnII   GATC  N^GATC_N            5' GATC     256 bp      palindromic
-  NlaIII  CATG  _CATG^              3' CATG     256 bp      palindromic
-  These enzymes leave different ends, so they do not ligate to each other:
-  each junction should carry a single enzyme's motif (unless the protocol
-  fills in ends before ligation).
+```bash
+pip install git+https://github.com/YOUR-USERNAME/wf-pore-c_AQB.git
 ```
 
-**After the digest**, the per-enzyme table shows how much each enzyme
-contributed to the fragmentation:
+> **Before the first push**, point the URLs at your own account:
+> ```bash
+> grep -rl YOUR-USERNAME . --exclude-dir=.git \
+>   | xargs sed -i 's/YOUR-USERNAME/your-github-handle/g'
+> ```
 
+Needs Python >= 3.8, `pysam` and `biopython` — both pulled in automatically.
+Three commands are installed:
+
+```bash
+pore-c-aqb digest
+pore-c-aqb merge        # also available as pore-c-aqb-merge
+pore-c-aqb junctions    # also available as pore-c-aqb-junctions
 ```
-Digested 1,036 concatemers (5,250,464 bases) into 40,307 monomers,
-cutting at 39,271 distinct positions.
 
-Recognition sites found in the reads:
-  enzyme   site    sites found  % of cuts  1 per (observed)  1 per (chance)
-  DpnII    GATC         14,721      37.5%            357 bp          256 bp
-  NlaIII   CATG         23,104      58.8%            227 bp          256 bp
-  HindIII  AAGCTT        1,497       3.8%          3,507 bp        4,096 bp
+For development:
+
+```bash
+git clone https://github.com/YOUR-USERNAME/wf-pore-c_AQB.git
+cd wf-pore-c_AQB
+pip install -e ".[dev]"
+pytest
 ```
-
-`--stats out.tsv` writes the same numbers as a table.
-
-### What this table does *not* say
-
-It counts **sites present in the reads**, not cuts. Every motif occurs in
-genomic DNA by chance — at roughly the rate in the last column — whether or not
-the enzyme was ever in the tube. In the run above, HindIII shows 1,497 sites at
-1 per 3,507 bp against a chance rate of 1 per 4,096 bp: exactly what you get
-from a genome that never saw the enzyme. HindIII did **not** cut this library.
-
-So the count is useful for deciding whether a second enzyme is worth adding,
-and for catching a wrong enzyme name (`0 sites` triggers a warning). It is
-**not** a test of whether the enzyme worked. That test needs aligned data:
-compare the motifs at ligation junctions against random positions on the same
-chromosomes, which is what `pore-c-aqb-junctions` does — see
-[`docs/INTEGRATION.md`](docs/INTEGRATION.md). A pre-release version of this
-tool labelled the column "cuts", which invited precisely the wrong conclusion.
 
 ---
 
-## Undoing the cuts the enzyme never made
-
-The digest cuts at **every** recognition site. The enzyme in the tube did not:
-real digestion is incomplete, so a genuine restriction fragment usually
-contains several uncut sites and ends up as several monomers that align
-head-to-tail on the genome.
-
-Nothing warns you, and the damage is severe. A locus split into *a* pieces
-facing a locus split into *b* pieces yields `a x b` pairs for **one** real
-contact — and the *a* pieces of a single locus get paired with each other,
-landing straight on the diagonal. On the library this tool came from: 11-fold
-duplication at 5 kb resolution, 18-fold at 25 kb, 44-76% of pairs on the
-diagonal. Juicer's normalisations cannot repair it, because only 14% of the
-bias is a row factor times a column factor; a 2.45x residual survives.
-
-This cannot be fixed during the digest. From the sequence alone, an uncut site
-inside a fragment and a reconstituted ligation junction are **identical**. The
-information only appears after alignment: two monomers consecutive along the
-read and contiguous on the genome were one uncut piece of DNA.
+## Quick start
 
 ```bash
-pore-c-aqb merge sample.ns.bam \
+# 0. check the enzymes before committing to a long run (reads no data)
+pore-c-aqb digest DpnII,NlaIII --dry-run
+
+# 1. digest with both enzymes
+pore-c-aqb digest DpnII,NlaIII reads.bam \
+    --output monomers.bam --stats digest_stats.tsv --threads 8
+
+# 2. align (unchanged, your usual command)
+samtools fastq -T '*' monomers.bam \
+  | minimap2 -ay -x map-hifi ref.fa - \
+  | samtools view -b -o aligned.ns.bam
+
+# 3. undo the cuts the enzyme never made, and get contacts
+pore-c-aqb merge aligned.ns.bam \
     --output fragments.tsv.gz \
     --pairs contacts.pairs --sizes hg38.sizes.genome \
     --stats merge_stats.json --min-fragments 2
+
+# 4. (diagnostic) which enzymes actually cut?
+pore-c-aqb junctions aligned.ns.bam ref.fa --enzymes DpnII,NlaIII,HindIII
 ```
 
-It prints what it changed on *your* data:
+---
+
+## Fix 1 — several enzymes in one digest
+
+A concatemer is digested **once**, by every enzyme in the tube at the same
+time. Its fragments are delimited by the **union** of all recognition sites.
+
+If the workflow is told about only one enzyme, a monomer that internally spans
+a junction made by the *other* enzyme is never split. It contains two distinct
+genomic loci, aligns to only one of them, and the rest is soft-clipped away.
+**The contact is lost, silently, with no warning anywhere.**
+
+```
+ read:   ---------A---------+---------B---------+---------C---------
+                          GATC                CATG
+                         (DpnII)             (NlaIII)
+
+ told only DpnII:   [----A----][-------- B + C --------]
+                                         ^
+                               two loci in one monomer; B aligns,
+                               C is soft-clipped and thrown away
+
+ told both:         [----A----][----B----][----C----]     all three kept
+```
+
+Measured end to end on real reads, through `samtools fastq` and `minimap2`:
+
+| `--cutter` | monomers | aligned | soft-clipped bases |
+|---|---:|---:|---:|
+| `DpnII` | 17,076 | 7,390 | 218,363 |
+| `DpnII,NlaIII` | 39,910 | 8,543 | **8,085** |
+
+Soft-clipping falls by 96%. Those clipped bases *were* the second locus.
+
+### How the union is computed
+
+Each enzyme searches the read **separately**, then all positions go into one
+set, are de-duplicated and sorted, and the read is cut once.
+
+Searching once with a combined pattern is wrong, and measurably so: a plain
+alternation (`GATC|CATG`) consumes its match and resumes after it, so
+overlapping sites are lost. In `CATGATC` the `CATG` at 0 swallows the `GATC`
+that starts at 3 — **243 wrong answers out of 1,600** when prototyped. Each
+enzyme therefore gets its own pass, using a zero-width lookahead `(?=(GATC))`
+so that even self-overlapping sites (`ATAT` in `ATATAT`) are all found.
+
+A position cut by two enzymes is **one** cut, so the union is a set; the number
+of such coincidences is reported separately, which is why the per-enzyme
+percentages sum to slightly more than 100.
+
+Adding an enzyme can only ever add cuts, never remove one — checked as a
+property test, and on 16,758 real concatemers: **0 lost boundaries, 0 tiling
+gaps**, 259,214 monomers becoming 634,479.
+
+---
+
+## Fix 2 — undo the cuts the enzyme never made
+
+The digest cuts at every recognition site. The enzyme in the tube did not: real
+digestion is incomplete, so a genuine restriction fragment usually contains
+several uncut sites and ends up as several monomers that align head-to-tail.
+
+Nothing warns you, and the damage is severe:
+
+```
+ reality:   locus X =====================  ligated to  ====== locus Y
+                     (one uncut fragment)
+
+ in silico: [x1][x2][x3][x4]                            [y1][y2]
+                     |                                      |
+                     +---------- 4 x 2 = 8 pairs -----------+
+                          where there was ONE contact
+
+            ...and x1-x2, x1-x3, x1-x4, x2-x3 ... all land on the DIAGONAL
+```
+
+On the library this tool came from: **11-fold duplication at 5 kb resolution,
+18-fold at 25 kb, 44-76% of all pairs on the diagonal.** Juicer's
+normalisations cannot repair it — only 14% of the bias is separable into a row
+factor times a column factor, so a residual factor of 2.45 survives whatever
+you normalise with. The distortion follows enzyme-site density, so it *deforms*
+the map rather than merely scaling it.
+
+### Why this cannot be fixed during the digest
+
+From the read sequence alone, an uncut `GATC` inside a fragment and a `GATC`
+reconstituted by ligation are **the same four letters**. There is no
+information to tell them apart.
+
+The information only appears after alignment: if the two pieces either side of
+a site land next to each other on the genome, the site was never cut. That is
+why this is a separate step, run on aligned monomers.
+
+```bash
+pore-c-aqb merge aligned.ns.bam --output fragments.tsv.gz \
+    --pairs contacts.pairs --sizes hg38.sizes.genome --min-fragments 2
+```
+
+Two monomers merge when they are consecutive along the read **and** contiguous
+on the genome: same chromosome, same strand, gap <= `--merge-gap` (100 bp by
+default). It prints what it changed on *your* data:
 
 ```
 Read 208,121 concatemers, 2,278,102 aligned monomers.
@@ -123,146 +220,140 @@ Cis contacts by separation, before and after merging:
   >1Mb             6.2%    25.8%
 ```
 
-The 10 kb - 1 Mb window, where TADs and loops live, goes from 13.9% of pairs to
-47.8%. The signal was there all along, buried under the artefact.
+Five cuts in six were false. The 10 kb - 1 Mb window, where TADs and loops
+live, goes from 13.9% of pairs to 47.8%. The signal was there all along.
 
-A sanity check worth doing on your own output: merged fragment length should
-grow linearly with the number of monomers glued. It does — 356 bp for a single
-monomer, then 747, 1,170, 1,592, 1,998 bp for 2, 3, 4, 5. Roughly one
-restriction fragment added each time, which is what an uncut site means.
+**A sanity check worth running on your own output.** Merged fragment length
+should grow linearly with the number of monomers glued, because each uncut site
+adds one restriction fragment. It does:
+
+| monomers merged | 1 | 2 | 3 | 4 | 5 |
+|---|---:|---:|---:|---:|---:|
+| median length | 356 bp | 747 bp | 1,170 bp | 1,592 bp | 1,998 bp |
 
 **Order matters, and getting it wrong is silent.** Merging runs on the complete
-chain of monomers; `--mapq` is applied afterwards, to the merged blocks.
-Filtering first breaks the chain: drop a middle monomer and its two neighbours
-stop being adjacent, so they are counted as two loci in contact — a contact
-that does not exist. During development this made the molecule count *rise*
-with a stricter threshold (61,677 to 70,735), which is impossible and was the
-giveaway. Two tests pin the ordering down.
+chain of monomers; `--mapq` is applied *afterwards*, to the merged blocks.
+Filter first and you break the chain — drop a middle monomer and its two
+neighbours stop being adjacent, so they are counted as two loci in contact, a
+contact that does not exist. During development this made the molecule count
+*rise* with a stricter threshold (61,677 to 70,735), which is impossible and
+was the giveaway. Two tests pin the ordering down.
+
+Outputs: `fragments.tsv.gz` (one row per merged fragment, with how many
+monomers were glued) and `contacts.pairs` (4DN v1.0, ready for `cooler cload
+pairs` or `juicer_tools pre`).
 
 ---
 
-## Install
+## Fix 3 — which enzymes actually cut?
+
+The digest report counts recognition **sites found in the reads**. That number
+cannot tell a working enzyme from one that never left the freezer, because
+every motif occurs in genomic DNA by chance — `AAGCTT` turns up every ~4 kb
+whatever was in the tube.
+
+> An earlier version of this tool labelled that column "cuts" and printed
+> `HindIII 1,497 cuts (9.2%)` for an enzyme that demonstrably never cut. A user
+> would have concluded the opposite of the truth. The column now says **sites
+> found**, prints the chance rate beside the observed one, and states plainly
+> that it is not evidence of cutting.
+
+The test that *does* work needs aligned data. Inside a concatemer, the boundary
+between two monomers that land far apart is a genuine ligation junction. If an
+enzyme cut, its motif sits at those boundaries far more often than at random
+positions on the same chromosomes:
 
 ```bash
-pip install git+https://github.com/AQB/wf-pore-c_AQB.git
+pore-c-aqb junctions aligned.ns.bam ref.fa --enzymes DpnII,NlaIII,HindIII,HinfI
 ```
 
-Requires Python ≥ 3.8, `pysam` and `biopython`. For development:
+```
+30,000 junction boundaries (MAPQ >= 20, jump > 1,000 bp)
+
+  enzyme     site      at junctions   at random  enrichment   verdict
+  DpnII      GATC             39.5%        1.3%       29.5x   yes, main enzyme
+  NlaIII     CATG             10.3%        2.3%        4.4x   yes, secondary
+  HindIII    AAGCTT            0.0%        0.1%        0.1x   no
+  HinfI      GANTC             1.3%        1.5%        0.9x   no
+```
+
+That is the run this tool was written for: the protocol notes said HindIII,
+`AAGCTT` sits *below* background at junctions, and the real second enzyme was
+NlaIII. This command changes nothing on disk — it only reads.
+
+Read the **enrichment** column, not the percentages: aligners soft-clip a few
+bases at monomer ends, so the absolute rates understate. `--tol 10` recovers
+DpnII to ~79% but inflates the random background too.
+
+---
+
+## Using it inside wf-pore-c
+
+Three routes, from least to most invasive, in
+[`docs/INTEGRATION.md`](docs/INTEGRATION.md). The simplest is to run the digest
+yourself and feed the monomers to the rest of your pipeline.
+
+To patch the workflow, [`patches/wf-pore-c-multicutter.patch`](patches/) applies
+to a checkout of `epi2me-labs/wf-pore-c` and swaps the digest at **both** call
+sites — `digest_align_annotate` invokes it once per chunking branch, with the
+positional arguments in a different order each time:
 
 ```bash
-git clone https://github.com/AQB/wf-pore-c_AQB.git
-cd wf-pore-c_AQB
-pip install -e ".[dev]"
-pytest
+pore-c-py digest "${meta.cutter}" ...                     # chunked: stdin
+pore-c-py digest "concatemers.bam" "${meta.cutter}" ...   # not chunked
 ```
 
-## Usage
-
-```
-pore-c-aqb digest ENZYME [INPUT ...] [options]
-pore-c-aqb digest [INPUT ...] ENZYME [options]     # upstream's order
-
-  ENZYME            One or more enzyme names. Separate with commas:
-                    'DpnII', 'DpnII,NlaIII', 'DpnII+NlaIII' all work.
-                    Names are Biopython's (Bio.Restriction).
-  INPUT             Unaligned BAM(s) of concatemers, a directory, or '-'
-                    for stdin (the default).
-
-  --output PATH        Output BAM ('-' for stdout).
-  --header PATH        BAM whose header to copy. Required when reading stdin.
-  --stats PATH         Write the per-enzyme site report as TSV.
-  --dry-run            Print what each enzyme will do, then exit.
-  --remove_tags ...    Extra SAM tags to strip.
-  --max_reads N        Take only the first N concatemers.
-  --max_monomers N     Drop a concatemer cut into more than N monomers.
-  --excluded_list PATH Names of the reads dropped by --max_monomers.
-  --excluded_bam PATH  The dropped reads themselves.
-  --recursive          Search an input directory recursively.
-  --glob PATTERN       Which files to take from a directory (default *.bam).
-  --threads N          Threads for BAM compression.
-  --debug/--quiet      Logging verbosity.
-```
-
-Both positional orders are accepted because wf-pore-c uses **both**: its
-chunked branch runs `digest "$cutter"` on stdin, its other branch runs
-`digest concatemers.bam "$cutter"`.
-
-Every option of `pore-c-py digest` is accepted with the same meaning, so an
-existing command line keeps working.
-
-Two further commands ship with the package, both working on **aligned**
-monomers:
-
-```
-pore-c-aqb merge     ALIGNED_BAM [--pairs contacts.pairs] [--stats s.json]
-pore-c-aqb junctions ALIGNED_BAM REFERENCE --enzymes DpnII,NlaIII[,...]
-```
-
-`merge` undoes the cuts the enzyme never made — see the next section.
-`junctions` reports which enzymes actually cut a library, the question the
-digest report cannot answer. Both are also installed as `pore-c-aqb-merge` and
-`pore-c-aqb-junctions`.
-
-## Wiring it into wf-pore-c
-
-See [`docs/INTEGRATION.md`](docs/INTEGRATION.md) and
-[`patches/`](patches/). In short, the workflow's digest call becomes:
-
-```diff
-- pore-c-py digest "$cutter" ...
-+ pore-c-aqb digest "$cutter" ...
-```
-
-at **both** of the workflow's digest call sites — it invokes the digest once
-per chunking branch, with the positionals in a different order each time — and
-`--cutter` may then be given a comma-separated list.
+`pore-c-aqb` accepts **either order**, and implements the `--max_monomers`,
+`--excluded_list`, `--excluded_bam`, `--recursive` and `--glob` options the
+workflow passes. Patching one branch, or dropping those options, leaves the
+workflow broken on one of its two paths.
 
 ---
 
 ## Correctness
 
-Three claims are tested, not asserted.
+Everything below is a test, not a claim.
 
-**1. With one enzyme, output is identical to `pore-c-py`.**
+**1. With one enzyme, output is identical to upstream.**
 
 `tests/test_equivalence.py` runs the real `pore-c-py` inside the published
-**wf-pore-c** image — the one the workflow actually uses, carrying pore-c-py
-**2.0.6** and biopython 1.82 — and diffs the resulting BAMs record by record.
-The strict comparison takes every field and **every tag, including each tag's
-value type**, so a divergence in something nobody thought to list still fails.
+**wf-pore-c** image — the version the workflow actually uses, pore-c-py
+**2.0.6** with biopython 1.82 — and diffs the BAMs. The strict comparison takes
+every field and **every tag, including each tag's value type**, so a divergence
+in something nobody thought to list still fails.
 
-Validated on **16,758 real PacBio 3C reads → 259,214 monomers**, of which
-203,342 carry base-modification tags: **zero differences, on every field and
-every tag**. The MM/ML recomputation is vendored verbatim from upstream
-(`src/pore_c_aqb/_vendored.py`) precisely so that this holds.
+Validated on **16,758 real PacBio 3C reads, 259,214 monomers**, of which
+203,342 carry base-modification tags: **zero differences**. The MM/ML
+recomputation is vendored verbatim from upstream (`src/pore_c_aqb/_vendored.py`)
+precisely so this holds.
 
 > Pin the image, not the package name. The standalone `ontresearch/pore-c-py`
-> image is a later 2.1.x which changed the mod-base tags — `ML` became a uint8
-> array and `MN` was added. Diffing against it reports differences that are
-> upstream's own version bump. This tool tracks 2.0.6 because that is what
-> wf-pore-c ships.
+> image is a later 2.1.x which changed the mod-base tags (`ML` became a uint8
+> array, `MN` was added). Diffing against it reports differences that are
+> upstream's own version bump, not defects here.
 
 **2. With several enzymes, the digest is a strict refinement.**
 
 Every boundary of the single-enzyme digest survives, monomers tile each read
-exactly, and the reads reconstruct byte-for-byte from their monomers. Checked
-on **16,758 real concatemers**: 0 lost boundaries, 0 tiling gaps, 259,214
-monomers becoming 634,479 — and as a property test over random sequences.
+exactly, and reads reconstruct byte-for-byte from their monomers. Checked on
+16,758 real concatemers and as a property test over random sequences.
 
-**3. The patched workflow actually runs.**
+**3. Merging is verified in both directions.**
 
-Both of wf-pore-c's digest invocations were replayed on real reads, through
-`samtools fastq` and `minimap2`, exactly as the workflow chains them. Adding
-the second enzyme does what it is supposed to do:
+Contiguous pieces merge; different chromosomes, different strands and distant
+loci never do; reverse-strand geometry is handled; and two tests fail if the
+MAPQ filter is moved before the merge.
 
-| `--cutter` | monomers | aligned | soft-clipped bases |
-|---|---:|---:|---:|
-| `DpnII` | 17,076 | 7,390 | 218,363 |
-| `DpnII,NlaIII` | 39,910 | 8,543 | **8,085** |
+**4. Awkward input fails with a sentence, not a traceback.**
 
-Soft-clipping falls by 96%. Those clipped bases were the second locus of a
-monomer that spanned an undigested NlaIII junction — the contacts the
-single-enzyme digest was throwing away.
+`tests/test_robustness.py` feeds the commands empty BAMs, non-BAM files,
+missing paths, unmapped-only reads, lowercase and `N`-containing sequences,
+1-base reads, BAMs from other tools with no `Xc` tag, coordinate-sorted BAMs,
+and extreme parameter values.
+
+```
+228 tests | 95% coverage | biopython 1.82 and 1.88 | flake8 clean
+```
 
 ### A reproducibility bug found along the way
 
@@ -274,35 +365,32 @@ NlaIII.search(Seq("CATGCCTTCTGTGCGAGCCC"))
 # biopython 1.88 -> []
 ```
 
-Biopython 1.88 drops sites whose second-strand cut lands exactly on a sequence
-edge — always at position 0 or at the very end, always producing a few-base
-monomer that never aligns. It is rare (2 cases in 350 pairs constructed to hit
-boundaries; 0 in 2,400 random sequences), but it is deterministic, not random:
-the same input reproduces it every time.
-
-The scientific impact is nil, and on a real library the two versions happen to
-agree exactly. But the divergence is real and reproducible on constructed
-input, which means **the same BAM can give different monomer counts on two
-machines** — not acceptable in a tool meant to be cited. This package is
-verified identical across both versions on the same real library: 16,758 reads,
-`DpnII,NlaIII`, **634,479 monomers either way, zero differing records**. The
-full test suite (170 tests) runs on both versions in CI.
+1.88 drops sites whose second-strand cut lands exactly on a sequence edge —
+always at position 0 or the very end, always producing a few-base monomer that
+never aligns. Rare (2 cases in 350 pairs built to hit boundaries, 0 in 2,400
+random sequences), but **deterministic**: the same BAM gives different monomer
+counts on two machines, which a tool meant to be cited cannot do.
 
 `src/pore_c_aqb/sites.py` therefore locates sites itself for palindromic
-enzymes — every enzyme used in 3C/Hi-C — under one documented rule, so the
-result no longer depends on the installed Biopython. Verified over **2,400
-comparisons across 20 palindromic enzymes: zero disagreements outside the
-documented boundary case**.
+enzymes — every enzyme used in 3C/Hi-C — under one documented rule. Verified
+over **2,400 comparisons across 20 palindromic enzymes: zero disagreements**,
+and 634,479 identical monomers from the same real library under both versions.
 
-Non-palindromic Type IIS enzymes (BsrI, AcuI, …) cut at a *distance* from their
-site, the reverse-strand geometry is fiddly, and none is used to build a Hi-C
-library. Those are handed back to Biopython rather than reimplemented on
-under-tested arithmetic. The version-dependent edge case can still occur for
-them; that is documented rather than hidden.
+Non-palindromic Type IIS enzymes (BsrI, AcuI, ...) cut at a *distance* from
+their site; the reverse-strand geometry is fiddly, an early attempt was off by
+2 bases on every one of them, and none is used to build a Hi-C library. They
+are delegated to Biopython rather than shipped on under-tested arithmetic. The
+principle throughout: *use our code where it has been proven, delegate where it
+has not.*
+
+Enzymes Biopython cannot digest safely are **rejected up front** with a clear
+message: 334 with no defined cut position, 25 that cut twice.
+
+---
 
 ## Performance
 
-Measured on 16,758 real 3C reads (mean 4.4 kb), single core, second run of two:
+16,758 real 3C reads (mean 4.4 kb), single core, second run of two:
 
 | | time | throughput |
 |---|---:|---:|
@@ -311,21 +399,18 @@ Measured on 16,758 real 3C reads (mean 4.4 kb), single core, second run of two:
 | `pore-c-aqb digest DpnII,NlaIII` | 60.8 s | 275 reads/s |
 
 No regression against upstream. A second enzyme costs about 50% more, split
-between the extra site search and the 2.4× larger output (259,214 → 634,479
-monomers). The digest is not the pipeline bottleneck: alignment of the same
-reads takes an order of magnitude longer.
+between the extra site search and the 2.4x larger output. The digest is not the
+bottleneck — alignment of the same reads takes an order of magnitude longer.
 
-A single-pass regular expression over all motifs was prototyped and
-**rejected**: it gave 243 wrong answers out of 1,600 because an alternation
-scan skips overlapping sites (in `CATGATC` the `CATG` match consumes the `GATC`
-that starts at offset 3), for only 1.2–1.4× on the realistic multi-enzyme case.
-Correctness won. The digest is not the pipeline bottleneck anyway — alignment
-dominates by an order of magnitude.
+---
 
-## Design notes
+## Documentation
 
-Longer discussion of the choices, with the measurements behind them, in
-[`docs/DESIGN.md`](docs/DESIGN.md).
+- [`docs/DESIGN.md`](docs/DESIGN.md) — every design choice, with the
+  measurement behind it, including the ideas that were tried and rejected
+- [`docs/INTEGRATION.md`](docs/INTEGRATION.md) — wiring it into wf-pore-c
+- [`CHANGELOG.md`](CHANGELOG.md)
+- [`NOTICE`](NOTICE) — exactly which files came from upstream, and every change
 
 ---
 
@@ -333,10 +418,10 @@ Longer discussion of the choices, with the measurements behind them, in
 
 Derived from [`pore-c-py`](https://github.com/epi2me-labs/pore-c-py) 2.0.6 by
 Oxford Nanopore Technologies PLC, and distributed under the same **Oxford
-Nanopore Technologies PLC Public License Version 1.0** (see `LICENSE`).
+Nanopore Technologies PLC Public License Version 1.0** (see [`LICENSE`](LICENSE)).
 
 That licence restricts use to **Research Purposes**. It is not an OSI-approved
 open-source licence; read it before depending on this in a commercial setting.
 
-The list of files taken from upstream, and every change made to them, is in
-[`NOTICE`](NOTICE).
+This project is not affiliated with or endorsed by Oxford Nanopore
+Technologies.

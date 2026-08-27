@@ -64,7 +64,7 @@ from itertools import combinations
 from pathlib import Path
 
 from pore_c_aqb import __version__
-from pore_c_aqb.reads import iter_concatemers
+from pore_c_aqb.reads import iter_concatemers, read_span
 
 __all__ = ["Fragment", "merge_adjacent", "fragments_of", "MergeStats", "main"]
 
@@ -83,6 +83,8 @@ class Fragment:
     strand: str
     mapq: int
     n_monomers: int = 1
+    #: rank along the read, used when read_start is unknown (-1)
+    order: int = 0
 
     @property
     def midpoint(self) -> int:
@@ -100,21 +102,28 @@ class Fragment:
 
 
 def fragments_of(alignments) -> list[Fragment]:
-    """One :class:`Fragment` per aligned monomer, in read order."""
-    return [
-        Fragment(
-            read_start=a.get_tag("Xc")[0] if a.has_tag("Xc")
-            else int(a.query_name.rsplit(":", 2)[1]),
-            read_end=a.get_tag("Xc")[1] if a.has_tag("Xc")
-            else int(a.query_name.rsplit(":", 2)[2]),
+    """One :class:`Fragment` per aligned monomer, in read order.
+
+    ``read_start``/``read_end`` are -1 when the BAM carries neither an ``Xc``
+    tag nor parseable monomer names; the order the alignments arrive in is then
+    the order along the read, as resolved by :func:`iter_concatemers`.
+    """
+    out = []
+    for offset, a in enumerate(alignments):
+        start, end = read_span(a)
+        if start < 0:
+            start = end = -1
+        out.append(Fragment(
+            read_start=start,
+            read_end=end,
             chrom=a.reference_name,
             ref_start=a.reference_start,
             ref_end=a.reference_end,
             strand="-" if a.is_reverse else "+",
             mapq=a.mapping_quality,
-        )
-        for a in alignments
-    ]
+            order=offset,
+        ))
+    return out
 
 
 def merge_adjacent(fragments: list[Fragment], gap: int) -> list[Fragment]:
@@ -131,10 +140,12 @@ def merge_adjacent(fragments: list[Fragment], gap: int) -> list[Fragment]:
     """
     if not fragments:
         return []
-    ordered = sorted(fragments, key=lambda f: f.read_start)
+    ordered = sorted(
+        fragments,
+        key=lambda f: (f.read_start if f.read_start >= 0 else f.order, f.order))
     out = [
         Fragment(f.read_start, f.read_end, f.chrom, f.ref_start, f.ref_end,
-                 f.strand, f.mapq, f.n_monomers)
+                 f.strand, f.mapq, f.n_monomers, f.order)
         for f in ordered[:1]
     ]
     for frag in ordered[1:]:
@@ -153,7 +164,8 @@ def merge_adjacent(fragments: list[Fragment], gap: int) -> list[Fragment]:
         else:
             out.append(Fragment(
                 frag.read_start, frag.read_end, frag.chrom, frag.ref_start,
-                frag.ref_end, frag.strand, frag.mapq, frag.n_monomers))
+                frag.ref_end, frag.strand, frag.mapq, frag.n_monomers,
+                frag.order))
     return out
 
 
@@ -238,12 +250,14 @@ FRAGMENT_COLUMNS = [
 ]
 
 
-def _chrom_sizes(sizes_path) -> dict:
+def _chrom_sizes(sizes_path) -> dict:  # noqa: D401
     """``{chrom: length}`` from a two-column sizes file, order preserved.
 
     The order of the file is the order used for the .pairs upper triangle, so
     it matches whatever genome ordering the rest of your pipeline uses.
     """
+    if not Path(sizes_path).exists():
+        raise SystemExit(f"Chromosome sizes file not found: {sizes_path}")
     sizes = {}
     with open(sizes_path) as fh:
         for line in fh:

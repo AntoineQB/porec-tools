@@ -27,7 +27,7 @@ pore-c-aqb-junctions = "pore_c_aqb.junctions:main"
 pore-c-aqb-merge = "pore_c_aqb.merge:main"
 
 [project.urls]
-Homepage = "https://github.com/AQB/wf-pore-c_AQB"
+Homepage = "https://github.com/YOUR-USERNAME/wf-pore-c_AQB"
 Upstream = "https://github.com/epi2me-labs/pore-c-py"
 
 [tool.setuptools.dynamic]

@@ -16,7 +16,7 @@ branch, and with the positional arguments in a different order each time
 Both are patched, and pore-c-aqb accepts either order.
 
 Requires pore-c-aqb in the process container:
-    pip install git+https://github.com/AQB/wf-pore-c_AQB.git
+    pip install git+https://github.com/YOUR-USERNAME/wf-pore-c_AQB.git
 
 Generated against epi2me-labs/wf-pore-c master; verified with `git apply`.
 

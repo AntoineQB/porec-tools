@@ -68,7 +68,7 @@ The container must then contain the package — see below.
 ```dockerfile
 FROM ontresearch/wf-pore-c:sha3787c234c0cacf66a67fb77da223cc2e1cb0baf0
 USER root
-RUN pip install --no-cache-dir git+https://github.com/AQB/wf-pore-c_AQB.git
+RUN pip install --no-cache-dir git+https://github.com/YOUR-USERNAME/wf-pore-c_AQB.git
 USER $WF_UID
 ```
 

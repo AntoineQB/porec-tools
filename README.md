@@ -45,15 +45,15 @@ Two of the three fixes act on **unaligned** reads, one on **aligned** ones.<br>
           |
           v
    +---------------------------+
-   |  porec digest        |  cut each read into monomers
-   |  DpnII,NlaIII             |  <- FIX 1
+   |       porec digest        |  cut each read into monomers
+   |       DpnII,NlaIII        |  <- FIX 1
    +---------------------------+
           |  monomers, still unaligned
           v
-   +---------------------------+
-   |  minimap2                 |  NOW each monomer gets a genomic position.
-   |  (unchanged)              |  Only here does it become knowable which
-   +---------------------------+  cuts were real.
+   +---------------------------+  NOW each monomer gets a genomic position.
+   |          minimap2         |  Only here does it become knowable which
+   |        (unchanged)        |  cuts were real.
+   +---------------------------+  
           |  aligned.ns.bam   (name-sorted: monomers of a read stay together)
           |
           +--------------------------------+

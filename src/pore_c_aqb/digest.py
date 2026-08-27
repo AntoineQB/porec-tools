@@ -43,7 +43,7 @@ logger = logging.getLogger("pore-c-aqb")
 class DigestStats:
     """Counters gathered while digesting.
 
-    ``sites_per_enzyme`` counts recognition sites **found in the reads**. It
+    ``sites_per_enzyme`` counts recognition sites found in the reads. It
     confirms each enzyme was applied and shows its share of the fragmentation.
     It is deliberately not called "cuts": a site occurring in the sequence is
     not evidence the enzyme cut it, since every motif occurs in genomic DNA by

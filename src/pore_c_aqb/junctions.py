@@ -11,7 +11,7 @@ can, and it needs alignments.
 The idea
 --------
 Inside a concatemer, the boundary between two consecutive monomers that land in
-different places in the genome is a **ligation junction**: two ends that were
+different places in the genome is a ligation junction: two ends that were
 cut by an enzyme and joined back together. If enzyme E cut, its site sits at
 those boundaries far more often than at random positions. If E never cut, its
 site is at exactly background frequency there.
@@ -20,7 +20,7 @@ So: collect junction boundaries, ask how often each enzyme's site is at one,
 and divide by the same quantity measured at random positions on the same
 chromosomes. That ratio is the answer. Around 1 means the enzyme did nothing.
 
-The outer ends of a concatemer are deliberately ignored. They carry adapters
+The outer ends of a concatemer are ignored. They carry adapters
 and trimming artefacts, not clean cut sites.
 
 Usage

@@ -82,7 +82,7 @@ def iter_concatemers(bam_path: str, require_sorted: bool = True,
     Pass a dict as ``tell`` to receive the file handle's ``tell`` method under
     that key, so a progress bar can report real progress through the file.
 
-    **No MAPQ filter happens here, deliberately.** Merging contiguous fragments
+    No MAPQ filter happens here, on purpose. Merging contiguous fragments
     has to run on the complete chain: removing a middle monomer first would
     break the contiguity, and two genomically adjacent blocks would then look
     like two distinct loci. Filter after merging, on the merged blocks.

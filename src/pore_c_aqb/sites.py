@@ -21,12 +21,12 @@ shared and cited.
 
 What we do about it
 -------------------
-For **palindromic** enzymes, which is every enzyme used in 3C/Hi-C protocols
+For palindromic enzymes, which is every enzyme used in 3C/Hi-C protocols
 (DpnII, NlaIII, HinfI, MseI, HindIII, EcoRI, BglII, NcoI, DdeI, Csp6I, ApoI,
 BamHI, AluI, HaeIII, TaqI, ...), we locate sites ourselves and apply one
 documented rule, so the result no longer depends on the installed Biopython.
 
-For **non-palindromic** enzymes we hand the search back to Biopython. Those are
+For non-palindromic enzymes we hand the search back to Biopython. Those are
 Type IIS enzymes that cut at a *distance* from their recognition site (AcuI
 cuts 16 bases downstream), the reverse-strand geometry is fiddly, and none of
 them is used to make a Hi-C library. Shipping under-tested arithmetic there
@@ -37,7 +37,7 @@ documented rather than hidden.
 The rule, for palindromic enzymes
 ---------------------------------
 A cut is emitted at ``site_start + fst5`` for every occurrence of the
-recognition site, **including overlapping occurrences**. Cuts outside
+recognition site, including overlapping occurrences. Cuts outside
 ``[0, len(seq)]`` are discarded; cuts at 0 or ``len(seq)`` are kept, because
 ``splits_to_intervals`` already handles them without creating empty monomers.
 

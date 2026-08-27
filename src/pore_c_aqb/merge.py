@@ -4,7 +4,7 @@
 
 The problem
 -----------
-The virtual digest cuts at **every** recognition site in a read. The enzyme in
+The virtual digest cuts at every recognition site in a read. The enzyme in
 the tube did not: digestion is never complete, so a genuine restriction
 fragment usually contains several uncut sites inside it. Those sites are cut in
 silico anyway, and one real fragment becomes several monomers that align
@@ -14,16 +14,16 @@ Nothing warns you. What you see instead is a Hi-C map with a grossly inflated
 diagonal, because every such split manufactures contacts that never happened:
 
 * a locus split into *a* pieces facing a locus split into *b* pieces yields
-  ``a x b`` pairs where there was **one** contact;
-* worse, the *a* pieces of a single locus are paired **with each other**, and
+  ``a x b`` pairs where there was one contact;
+* worse, the *a* pieces of a single locus are paired with each other, and
   those land straight on the diagonal.
 
 On the library this tool was written for, that was an 11-fold duplication at
 5 kb resolution and 18-fold at 25 kb, with 44-76% of all pairs on the diagonal.
 Juicer's normalisations cannot repair it: only 14% of the bias is separable
 into a row factor times a column factor, so a residual factor of 2.45 survives
-whatever you normalise with. The distortion also **follows enzyme-site
-density**, so it deforms the map rather than merely scaling it.
+whatever you normalise with. The distortion also follows enzyme-site
+density, so it deforms the map rather than just scaling it.
 
 The fix
 -------
@@ -41,16 +41,17 @@ along, buried under the artefact.
 
 Order matters
 -------------
-Merging runs on the **complete** chain of monomers, and the MAPQ filter is
+Merging runs on the complete chain of monomers, and the MAPQ filter is
 applied afterwards, to the merged blocks. Filtering first breaks the chain: a
 poorly mapped monomer in the middle is removed, its two neighbours are no
 longer adjacent, and they are counted as two distinct loci in contact - a
 contact that does not exist.
 
-This is not hypothetical. Doing it in the wrong order made the molecule count
-*rise* with a stricter MAPQ threshold (61,677 to 70,735), which is the tell:
-a stricter filter cannot create molecules. A merged block is kept when at least
-one of its monomers passed, so each block carries the highest MAPQ it contained.
+Doing it in the wrong order made the molecule count *rise* with a stricter
+MAPQ threshold (61,677 to 70,735). A stricter filter
+cannot create molecules, and that is how the bug was found. A merged block is
+kept when at least one of its monomers passed, so each block carries the
+highest MAPQ it contained.
 """
 from __future__ import annotations
 
@@ -142,7 +143,7 @@ def merge_adjacent(fragments: list[Fragment], gap: int) -> list[Fragment]:
     the minus strand runs backwards along the reference: the next monomer's
     start may follow the previous one's end, or precede its start.
 
-    The merged block keeps the **highest** MAPQ of its parts, so that a block
+    The merged block keeps the highest MAPQ of its parts, so that a block
     containing one confidently placed monomer survives the later filter.
     """
     if not fragments:
@@ -436,7 +437,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  break the chain - drop a middle monomer and its two neighbours\n"
             "  stop being adjacent, so they are counted as two loci in contact.\n"
             "  Getting this backwards made the molecule count RISE with a\n"
-            "  stricter threshold, which is impossible and was the giveaway.\n"
+            "  stricter threshold, which is impossible and is how it was found.\n"
             "\n"
             "EXAMPLES\n"
             "  pore-c-aqb merge sample.ns.bam --output fragments.tsv.gz\n"

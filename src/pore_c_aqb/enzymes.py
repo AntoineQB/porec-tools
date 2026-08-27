@@ -162,7 +162,7 @@ def iter_usable(query: str | None = None, common_only: bool = False):
     ``query`` matches a name (case-insensitively, as a substring) or a
     recognition site. Enzymes Biopython cannot place a cut for, and those that
     cut twice, are left out: they are rejected by :func:`resolve_enzymes`
-    anyway, so listing them would only invite a confusing error.
+    anyway, so listing them would only lead to a confusing error.
     """
     names = COMMON_3C_ENZYMES if common_only else sorted(
         Restriction.AllEnzymes.as_string(), key=str.lower)

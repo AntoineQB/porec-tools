@@ -7,7 +7,7 @@ with the commands given.
 
 ## 1. Union of cut points, not one digest per enzyme
 
-A concatemer is digested **once**, by all enzymes present simultaneously. Its
+A concatemer is digested once, by all enzymes present simultaneously. Its
 fragments are delimited by the union of every recognition site.
 
 Running the digest once per enzyme and merging the outputs afterwards would be
@@ -19,7 +19,7 @@ and by NlaIII into `[0,30)[30,90)` has a true double digest of
 So `find_cut_points` takes the union of positions, then reuses upstream's
 `splits_to_intervals` unchanged.
 
-**De-duplication.** Two enzymes can cut at the same base. That is one cut in
+De-duplication. Two enzymes can cut at the same base. That is one cut in
 the tube, so the union is a `set`. The count of such coincidences is reported
 separately (`shared_cut_points`) so the per-enzyme percentages still add up
 honestly.
@@ -41,7 +41,7 @@ enzyme. Prototyped and measured:
 | 2 | 0.180 ms | 0.223 ms | 1.2x |
 | 4 | 0.289 ms | 0.414 ms | 1.4x |
 
-**And 243 wrong answers out of 1,600.** A plain alternation scan consumes its
+And 243 wrong answers out of 1,600. A plain alternation scan consumes its
 match and resumes after it, so overlapping sites are lost: in `CATGATC` the
 `CATG` match at 0 swallows the `GATC` that starts at 3.
 
@@ -65,7 +65,7 @@ The monomers involved are a few bases long and never align, so no result
 changes. But the *same BAM digested on two machines yields different monomer
 counts*, and a tool meant to be cited cannot do that.
 
-`sites.py` therefore scans for sites itself, using a **lookahead** regex,
+`sites.py` therefore scans for sites itself, using a lookahead regex,
 `(?=(GATC))`, which is zero-width and so reports overlapping matches, avoiding
 the bug that killed the first attempt. One documented rule: a cut at
 `site_start + fst5` for every occurrence, kept when inside `[0, len]`.
@@ -99,7 +99,7 @@ been proven, delegate where it has not.*
 after trimming. It is the subtlest code in the digest: an off-by-one silently
 corrupts every downstream methylation analysis, and nothing would fail loudly.
 
-It is copied **unchanged** into `_vendored.py`, with attribution. Any
+It is copied unchanged into `_vendored.py`, with attribution. Any
 "improvement" would break the byte-identity guarantee, which
 `tests/test_equivalence.py` enforces by diffing against the real upstream tool.
 
@@ -110,17 +110,17 @@ value types included**.
 
 Two traps here, both hit during development:
 
-* Compare against the **right version**. The standalone `ontresearch/pore-c-py`
+* Compare against the right version. The standalone `ontresearch/pore-c-py`
   image is a later 2.1.x that writes `ML` as a uint8 array and adds `MN`;
   2.0.6 writes `ML` as a string and has no `MN`. Diffing against 2.1.x
   produced three "defects" that were nothing of the sort. wf-pore-c ships
   2.0.6, so 2.0.6 is what this tracks.
-* Compare **everything**. The first version of the comparison listed the tags
+* Compare everything. The first version of the comparison listed the tags
   it cared about (`MI`, `Xc`, `MM`, `ML`) and ran on synthetic reads carrying
   none of them, so it would have passed with the mod-base handling entirely
   broken. It now compares every tag *and its value type*, on reads that
-  actually carry `MM`/`ML`. Deliberately writing `ML` as a string makes three
-  tests fail, which is the property a test of this kind needs.
+  actually carry `MM`/`ML`. Writing `ML` as a string on purpose makes three
+  tests fail, so the check has some force behind it.
 
 ---
 
@@ -132,20 +132,20 @@ specification fails in milliseconds rather than after hours.
 
 Also handled at resolution time:
 
-- **Isoschizomers collapsed.** `DpnII,MboI` both recognise `GATC` and cut
+- Isoschizomers collapsed. `DpnII,MboI` both recognise `GATC` and cut
   identically; searching twice is wasted work and would double-count in the
   per-enzyme report.
-- **Rejected**: enzymes that cut twice (two cut points per site, which
+- Rejected: enzymes that cut twice (two cut points per site, which
   `splits_to_intervals` does not model), and enzymes with no defined cut
   position, for instance `HpyUM037X`, whose site is `TNGGNAG|GTGGNAG`.
-- **Typos** get close-match suggestions, case-insensitive first, so `dpnii`
+- Typos get close-match suggestions, case-insensitive first, so `dpnii`
   points at `DpnII`.
 
 ---
 
 ## 5. Per-enzyme statistics, and what they are not
 
-Not decoration. The dataset that motivated this tool had been digested with
+The dataset that motivated this tool had been digested with
 DpnII alone, while a fifth of its ligation junctions sat on `CATG`. Finding
 that out required a bespoke junction analysis after the fact.
 
@@ -160,7 +160,7 @@ that out required a bespoke junction analysis after the fact.
 
 ### The mistake this section exists to record
 
-A pre-release version labelled that column **cuts**, and the caveat in the
+A pre-release version labelled that column cuts, and the caveat in the
 module docstring called it a way to answer "did this enzyme actually cut?".
 Both were wrong, and dangerously so. On the very run above it printed:
 
@@ -172,14 +172,14 @@ HindIII did not cut this library. Junction analysis puts `AAGCTT` *below*
 background at ligation junctions. What the number counts is occurrences of the
 motif in the reads, and `AAGCTT` occurs every ~4 kb in human DNA no matter what
 was in the tube. A user reading "9.2% cuts" would conclude the enzyme worked.
-That is the opposite of the truth, produced by the tool's own summary line.
+The tool's own summary line was leading the reader to the wrong conclusion.
 
 Two things were changed:
 
-1. **The column says `sites found`,** and the chance rate is printed beside the
+1. The column says `sites found`, and the chance rate is printed beside the
    observed one so the reader can see they match. A closing note states that
    the number is not proof of cutting.
-2. **The real test ships as a second command,** `pore-c-aqb-junctions`, which
+2. The real test ships as a second command, `pore-c-aqb-junctions`, which
    measures motif enrichment at ligation junctions against a random background
    on the same chromosomes. It needs alignments, which is exactly why the
    digest cannot answer the question.

@@ -3,8 +3,8 @@
 """A progress bar, so a long run tells you where it is and when it will end.
 
 Digesting a full library takes tens of minutes and merging a 24 GB BAM takes a
-couple of them. Silence for that long is indistinguishable from a hang, and a
-user's only options are to wait or to kill it.
+couple of them. With no output during that time you cannot tell a slow run
+from a stuck one, and the only options are to wait or to kill it.
 
 How the percentage is real, not guessed
 ---------------------------------------
@@ -19,13 +19,13 @@ only - honest about not knowing rather than inventing a total.
 
 Deliberate choices
 ------------------
-* **stderr, never stdout.** Some commands write their real output to stdout;
+* stderr, never stdout. Some commands write their real output to stdout;
   a bar there would corrupt it.
-* **Off unless stderr is a terminal.** Redirect to a file or a Nextflow log and
+* Off unless stderr is a terminal. Redirect to a file or a Nextflow log and
   you get no carriage-return soup. ``--progress`` forces it on anyway.
-* **No dependency.** tqdm would do this well, but adding a dependency to a tool
+* No dependency. tqdm would do this well, but adding a dependency to a tool
   people install into an existing pipeline is a cost, for forty lines.
-* **Rate-limited redraws.** At most every 0.15 s, so the bar never becomes the
+* Rate-limited redraws. At most every 0.15 s, so the bar never becomes the
   bottleneck it is reporting on.
 """
 from __future__ import annotations

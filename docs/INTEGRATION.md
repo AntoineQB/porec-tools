@@ -42,7 +42,7 @@ git apply /path/to/wf-pore-c_AQB/patches/wf-pore-c-multicutter.patch
 It does two things:
 
 1. swaps `pore-c-py digest` for `pore-c-aqb digest` in `modules/local/pore-c.nf`
-   at **both** call sites;
+   at both call sites;
 2. documents the comma-separated form in `nextflow_schema.json`.
 
 The two call sites matter. `digest_align_annotate` branches on `chunk_size`,
@@ -87,7 +87,7 @@ same input.
 
 ## Checking it worked
 
-**Before committing to a long run**, resolve the enzymes without reading data:
+Before committing to a long run, resolve the enzymes without reading data:
 
 ```bash
 pore-c-aqb digest DpnII,NlaIII --dry-run
@@ -103,12 +103,12 @@ Enzymes resolved from 'DpnII,NlaIII':
 Check the site and the cut position against your protocol here. It costs a
 second, and a wrong enzyme wastes the whole run.
 
-**After the digest**, read the per-enzyme table. `0 sites` for an enzyme means
+After the digest, read the per-enzyme table. `0 sites` for an enzyme means
 the name is wrong or the reads are not from that run, and is flagged as a
 warning. A large count means only that the motif is present, which it always
 is. See the caveat below.
 
-**Provenance** is recorded in the BAM header:
+Provenance is recorded in the BAM header:
 
 ```bash
 samtools view -H monomers.ns.bam | grep pore-c-aqb
@@ -119,7 +119,7 @@ samtools view -H monomers.ns.bam | grep pore-c-aqb
 
 ## After the workflow: undo the cuts the enzyme never made
 
-The digest is deliberately generous. It cuts at every recognition site,
+The digest cuts at every recognition site on purpose,
 because from the read sequence alone an uncut site inside a fragment is
 indistinguishable from a reconstituted ligation junction. That over-cutting has
 to be undone once the monomers are aligned, or the Hi-C diagonal is inflated by
@@ -146,7 +146,7 @@ concatemers.bam
 end, midpoint, strand, MAPQ, and how many monomers were glued. `contacts.pairs`
 is 4DN v1.0, ready for `cooler cload pairs` or `juicer_tools pre`.
 
-Read the before/after table it prints. A large `<1kb` share **before** merging
+Read the before/after table it prints. A large `<1kb` share before merging
 is the artefact itself: pieces of one uncut restriction fragment being paired
 with each other, landing on the diagonal.
 
@@ -156,7 +156,7 @@ with each other, landing on the diagonal.
 
 The digest report cannot answer this, and does not pretend to: it counts sites
 present in the reads, and every motif is present by chance. The test that does
-work needs **aligned** monomers, and ships with this package:
+work needs aligned monomers, and ships with this package:
 
 ```bash
 pore-c-aqb-junctions monomers.aligned.ns.bam hg38.fa \
@@ -178,17 +178,17 @@ against random positions on the same chromosomes:
 ```
 
 That is the run this tool was written for. The protocol notes said HindIII;
-`AAGCTT` sits **below** background at junctions, so HindIII never cut. The
+`AAGCTT` sits below background at junctions, so HindIII never cut. The
 second enzyme was NlaIII. Same verdicts on the second sample of the pair.
 
 Notes on reading it:
 
-- **Use the enrichment column, not the percentages.** Aligners soft-clip a few
+- Use the enrichment column, not the percentages. Aligners soft-clip a few
   bases at monomer ends, so the boundary drifts off the true cut and the
   absolute rates understate. `--tol 10` recovers DpnII to ~79% but inflates the
   random background too, dropping every enrichment.
 - The outer ends of a concatemer are ignored. They carry adapters, not cut
   sites. (A diagnostic based on read termini was tried first and returns 0% for
   every enzyme, including ones that certainly cut, for exactly this reason.)
-- Running this **before** the digest saves re-running it. It only needs an
+- Running this before the digest saves re-running it. It only needs an
   aligned BAM from any earlier single-enzyme run.

@@ -4,7 +4,7 @@
 
 What the report can and cannot tell you
 ---------------------------------------
-It counts **recognition sites found in the reads**, per enzyme. That is a
+It counts recognition sites found in the reads, per enzyme. That is a
 factual, useful number: it confirms the enzyme was really applied, catches a
 name typo, and shows how much each enzyme contributes to the fragmentation.
 
@@ -17,7 +17,7 @@ can see that the two are expected to match. What the numbers do tell you is how
 much fragmentation each enzyme can possibly contribute, which is what you need
 when deciding whether adding an enzyme was worth it.
 
-Telling a working enzyme from a dud requires the **aligned** data: take the
+Telling a working enzyme from a dud requires the aligned data: take the
 junctions between consecutive monomers that jump in the genome, and test which
 motif sits at those boundaries against a random-position background. See
 docs/INTEGRATION.md.

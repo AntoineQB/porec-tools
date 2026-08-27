@@ -30,6 +30,7 @@ from pore_c_aqb.report import (
     describe_overhang,
     enzyme_table,
     expected_site_spacing,
+    list_enzymes,
 )
 
 PROG = "pore-c-aqb"
@@ -114,6 +115,28 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dry-run", action="store_true",
         help=("Print what each enzyme will do, then exit without reading "
               "input. Use it to check the enzymes before a long run."))
+
+    e = sub.add_parser(
+        "enzymes",
+        help="List the restriction enzymes you can use, or search them.",
+        description=(
+            "Which enzymes can I give to 'digest'? This lists them, with the "
+            "cut drawn on both strands and the sticky end each one leaves."),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "EXAMPLES\n"
+            "  pore-c-aqb enzymes            the ones used in 3C/Hi-C\n"
+            "  pore-c-aqb enzymes --all      all 729 usable ones\n"
+            "  pore-c-aqb enzymes GATC       every enzyme cutting GATC\n"
+            "  pore-c-aqb enzymes Dpn        every name containing 'Dpn'\n"))
+    e.add_argument(
+        "query", nargs="?", default=None,
+        help=("A name fragment ('Dpn') or a recognition site ('GATC'). "
+              "Searching implies --all."))
+    e.add_argument(
+        "--all", action="store_true",
+        help=("List every usable enzyme, not just those commonly used in "
+              "3C/Hi-C."))
 
     sub.add_parser(
         "merge", add_help=False,
@@ -327,6 +350,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     _setup_logging(getattr(args, "log_level", logging.INFO),
                    getattr(args, "logfile", None))
+    if args.command == "enzymes":
+        for line in list_enzymes(args.query,
+                                 common_only=not (args.all or args.query)):
+            print(line)
+        return 0
     if args.command == "digest":
         return run_digest(args)
     parser.error(f"Unknown command: {args.command}")

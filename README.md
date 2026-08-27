@@ -65,6 +65,7 @@ Needs Python >= 3.8, `pysam` and `biopython` — both pulled in automatically.
 Three commands are installed:
 
 ```bash
+pore-c-aqb enzymes      # which enzymes can I use?
 pore-c-aqb digest
 pore-c-aqb merge        # also available as pore-c-aqb-merge
 pore-c-aqb junctions    # also available as pore-c-aqb-junctions
@@ -84,7 +85,9 @@ pytest
 ## Quick start
 
 ```bash
-# 0. check the enzymes before committing to a long run (reads no data)
+# 0. find your enzymes, then check what the digest will do with them
+pore-c-aqb enzymes                    # the 3C/Hi-C shortlist
+pore-c-aqb enzymes CATG               # everything cutting CATG
 pore-c-aqb digest DpnII,NlaIII --dry-run
 
 # 1. digest with both enzymes
@@ -139,6 +142,30 @@ Measured end to end on real reads, through `samtools fastq` and `minimap2`:
 | `DpnII,NlaIII` | 39,910 | 8,543 | **8,085** |
 
 Soft-clipping falls by 96%. Those clipped bases *were* the second locus.
+
+### Which enzymes can I use?
+
+Any of the 729 Biopython knows a cut position for. `pore-c-aqb enzymes` shows
+the ones that actually turn up in 3C protocols, and searches the rest by name
+or by recognition site:
+
+```
+$ pore-c-aqb enzymes
+  enzyme   site      cut (both strands)  sticky end  1 site per  recognition
+  DpnII    GATC      N^GATC_N            5' GATC     256 bp      palindromic
+  MboI     GATC      N^GATC_N            5' GATC     256 bp      palindromic
+  NlaIII   CATG      _CATG^              3' CATG     256 bp      palindromic
+  HinfI    GANTC     G^ANT_C             5' ANT      256 bp      palindromic
+  ...
+  NotI     GCGGCCGC  GC^GGCC_GC          5' GGCC     65,536 bp   palindromic
+
+$ pore-c-aqb enzymes CATG      # by site
+$ pore-c-aqb enzymes Dpn       # by name
+$ pore-c-aqb enzymes --all     # all 729
+```
+
+The 334 enzymes with no defined cut position and the 25 that cut twice are left
+out, because the digest rejects them anyway.
 
 ### How the union is computed
 

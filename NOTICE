@@ -85,9 +85,13 @@ Changes made
    concatemer cut into more pieces than the limit is dropped whole rather
    than trimmed.
 
-9. Provenance
+9. Enzyme catalogue  [iter_usable, report.list_enzymes, new]
+   `pore-c-aqb enzymes` lists and searches the enzymes the digest accepts.
+   Not derived from upstream code.
+
+10. Provenance
    A @PG line recording the tool, version, command line and enzyme list is
    added to the output BAM header.
 
-10. Command-line interface  [src/pore_c_aqb/cli.py, new]
+11. Command-line interface  [src/pore_c_aqb/cli.py, new]
    Argument-compatible with `pore-c-py digest`; adds --stats and --dry-run.

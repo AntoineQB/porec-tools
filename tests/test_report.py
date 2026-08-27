@@ -8,12 +8,13 @@ exist to keep that from coming back.
 import pytest
 
 from pore_c_aqb.digest import DigestStats, find_cut_points
-from pore_c_aqb.enzymes import resolve_enzymes
+from pore_c_aqb.enzymes import iter_usable, resolve_enzymes
 from pore_c_aqb.report import (
     describe_cut,
     describe_overhang,
     enzyme_table,
     expected_site_spacing,
+    list_enzymes,
 )
 
 
@@ -114,3 +115,67 @@ def test_report_survives_an_empty_digest():
     stats = DigestStats()
     lines = stats.summary_lines(resolve_enzymes("DpnII"))
     assert lines and "0 concatemers" in lines[0]
+
+
+# --------------------------------------------------------------------------
+# the enzyme catalogue
+# --------------------------------------------------------------------------
+def test_catalogue_shows_the_3c_workhorses():
+    text = "\n".join(list_enzymes())
+    for name in ("DpnII", "NlaIII", "HinfI", "MseI", "HindIII"):
+        assert name in text
+
+
+def test_catalogue_says_it_is_not_a_restriction():
+    """A short list must not read as "these are the only ones allowed"."""
+    text = "\n".join(list_enzymes())
+    assert "not a restriction" in text
+    assert "--all" in text
+
+
+def test_catalogue_lists_every_usable_enzyme():
+    assert len(list(iter_usable())) > 700
+
+
+def test_catalogue_excludes_what_resolve_would_reject():
+    """Listing an enzyme the digest refuses would only invite a bad error."""
+    names = {e.name for e in iter_usable()}
+    assert "BcgI" not in names, "cuts twice"
+    assert "ScoDS2II" not in names, "no defined cut position"
+    for name in names:
+        resolve_enzymes(name)          # must not raise
+
+
+def test_search_by_name_fragment():
+    assert {e.name for e in iter_usable("Dpn")} == {"DpnI", "DpnII"}
+
+
+def test_search_by_recognition_site():
+    found = {e.name for e in iter_usable("CATG")}
+    assert "NlaIII" in found and "FatI" in found
+    assert all(e.site == "CATG" for e in iter_usable("CATG"))
+
+
+def test_search_is_case_insensitive():
+    assert {e.name for e in iter_usable("dpn")} == \
+           {e.name for e in iter_usable("DPN")}
+
+
+def test_search_with_no_match_explains_what_to_try():
+    text = "\n".join(list_enzymes("ZZZZ"))
+    assert "No usable enzyme matches" in text
+    assert "GATC" in text and "--all" in text
+
+
+def test_no_ligation_note_in_a_catalogue():
+    """DpnI and DpnII are alternatives here, not a combination.
+
+    The compatibility warning belongs to enzymes the user chose to digest
+    with; in a listing it is a non-sequitur.
+    """
+    assert "do not ligate" not in "\n".join(list_enzymes("Dpn"))
+
+
+def test_ligation_note_still_appears_for_a_chosen_set():
+    text = "\n".join(enzyme_table(resolve_enzymes("DpnII,NlaIII")))
+    assert "do not ligate" in text

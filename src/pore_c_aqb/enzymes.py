@@ -19,6 +19,8 @@ from Bio import Restriction
 from Bio.Seq import Seq
 
 __all__ = [
+    "COMMON_3C_ENZYMES",
+    "iter_usable",
     "EnzymeSpecError",
     "ResolvedEnzyme",
     "parse_enzyme_spec",
@@ -138,3 +140,38 @@ def resolve_enzymes(spec: str | Sequence[str]) -> list[ResolvedEnzyme]:
 def describe_enzymes(enzymes: Sequence[ResolvedEnzyme]) -> str:
     """One-line human-readable summary, for logs and BAM headers."""
     return ", ".join(f"{e.name}({e.site})" for e in enzymes)
+
+
+#: Enzymes that actually turn up in 3C / Hi-C / Pore-C protocols. Not a
+#: restriction on what you may use - any name below is accepted - just the
+#: short list worth showing first, since Biopython knows 729 usable enzymes and
+#: a wall of them helps nobody.
+COMMON_3C_ENZYMES = [
+    "DpnII", "MboI", "Sau3AI",      # GATC, the classic 4-cutter
+    "NlaIII",                       # CATG, the usual second enzyme
+    "HinfI",                        # GANTC, the Arima kit's second enzyme
+    "MseI", "MluCI", "CviQI", "BfaI", "AluI", "MspI", "TaqI", "DdeI",
+    "HindIII", "BglII", "EcoRI", "BamHI", "NcoI", "KpnI", "XhoI",
+    "NotI",                         # 8-cutter, for very coarse maps
+]
+
+
+def iter_usable(query: str | None = None, common_only: bool = False):
+    """Enzymes this tool can digest with, optionally filtered.
+
+    ``query`` matches a name (case-insensitively, as a substring) or a
+    recognition site. Enzymes Biopython cannot place a cut for, and those that
+    cut twice, are left out: they are rejected by :func:`resolve_enzymes`
+    anyway, so listing them would only invite a confusing error.
+    """
+    names = COMMON_3C_ENZYMES if common_only else sorted(
+        Restriction.AllEnzymes.as_string(), key=str.lower)
+    needle = query.upper() if query else None
+    for name in names:
+        try:
+            enzyme = _resolve_one(name)
+        except EnzymeSpecError:
+            continue
+        if needle and needle not in name.upper() and needle != enzyme.site:
+            continue
+        yield enzyme

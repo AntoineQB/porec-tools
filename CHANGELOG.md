@@ -13,6 +13,10 @@ First release. Derived from pore-c-py 2.0.6.
 - Enzyme table printed before the digest, and on its own with `--dry-run`:
   site, cut position drawn on both strands (`N^GATC_N`), sticky end, expected
   site spacing. Enzymes leaving incompatible ends are flagged as such.
+- `pore-c-aqb enzymes`: lists the enzymes you can digest with, searchable by
+  name or by recognition site, with the cut drawn on both strands and the
+  sticky end each one leaves. A curated 3C/Hi-C shortlist by default, `--all`
+  for the 729 usable ones.
 - `pore-c-aqb merge` (also `pore-c-aqb-merge`): glues back the fragments the in
   silico digest split but the enzyme never cut. Outputs merged fragments as
   TSV, contacts as 4DN `.pairs`, and a before/after breakdown of cis distances

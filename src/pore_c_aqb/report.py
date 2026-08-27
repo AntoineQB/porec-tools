@@ -42,6 +42,7 @@ __all__ = [
     "describe_overhang",
     "enzyme_table",
     "format_report",
+    "list_enzymes",
 ]
 
 
@@ -99,8 +100,15 @@ def describe_overhang(enzyme: ResolvedEnzyme) -> str:
     return f"{end} {seq}" if seq else f"{end} {abs(ovhg)} nt"
 
 
-def enzyme_table(enzymes: Sequence[ResolvedEnzyme]) -> list[str]:
-    """What each enzyme will do, before any data is read."""
+def enzyme_table(enzymes: Sequence[ResolvedEnzyme],
+                 note_compatibility: bool = True) -> list[str]:
+    """What each enzyme will do, before any data is read.
+
+    ``note_compatibility`` adds a line when the chosen enzymes leave ends that
+    cannot ligate to each other. That is worth saying when the user has picked
+    a set to digest with, and meaningless in a catalogue listing, where the
+    enzymes shown are alternatives rather than a combination.
+    """
     rows = [
         (e.name, e.site, describe_cut(e), describe_overhang(e),
          f"{expected_site_spacing(e.site):,.0f} bp",
@@ -117,7 +125,8 @@ def enzyme_table(enzymes: Sequence[ResolvedEnzyme]) -> list[str]:
             "  " + "  ".join(c.ljust(w) for c, w in zip(r, widths)).rstrip())
 
     ends = {describe_overhang(e) for e in enzymes}
-    if len(enzymes) > 1 and len(ends) == len(enzymes) and "?" not in ends:
+    if (note_compatibility and len(enzymes) > 1
+            and len(ends) == len(enzymes) and "?" not in ends):
         lines.append(
             "  These enzymes leave different ends, so they do not ligate to "
             "each other: each junction should carry a single enzyme's motif "
@@ -187,4 +196,25 @@ def format_report(stats, enzymes: Sequence[ResolvedEnzyme]) -> list[str]:
         "large count here means nothing on its own. To find out which enzyme "
         "really cut, compare motifs at ligation junctions against random "
         "positions in the ALIGNED data; see docs/INTEGRATION.md.")
+    return lines
+
+
+def list_enzymes(query: str | None = None, common_only: bool = True) -> list[str]:
+    """The catalogue, as lines ready to print."""
+    from pore_c_aqb.enzymes import iter_usable
+
+    found = list(iter_usable(query, common_only=common_only))
+    if not found:
+        return [f"No usable enzyme matches {query!r}.",
+                "Try a name fragment ('Dpn'), a recognition site ('GATC'), "
+                "or --all to see every one."]
+    lines = enzyme_table(found, note_compatibility=False)
+    scope = "commonly used in 3C/Hi-C" if common_only else "usable"
+    filtered = f" matching {query!r}" if query else ""
+    lines.append("")
+    lines.append(f"  {len(found)} enzyme(s) {scope}{filtered}.")
+    if common_only and not query:
+        lines.append("  This is a short list, not a restriction: any of the "
+                     "729 enzymes Biopython can place a cut for is accepted. "
+                     "Use --all to see them, or pass a name or site to search.")
     return lines

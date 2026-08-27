@@ -13,6 +13,9 @@ First release. Derived from pore-c-py 2.0.6.
 - Enzyme table printed before the digest, and on its own with `--dry-run`:
   site, cut position drawn on both strands (`N^GATC_N`), sticky end, expected
   site spacing. Enzymes leaving incompatible ends are flagged as such.
+- Progress bar on `digest`, `merge` and `junctions`, with a real percentage
+  and ETA taken from the BGZF file offset rather than guessed. Drawn only on a
+  terminal; `--progress` / `--no-progress` override. No new dependency.
 - `pore-c-aqb enzymes`: lists the enzymes you can digest with, searchable by
   name or by recognition site, with the cut drawn on both strands and the
   sticky end each one leaves. A curated 3C/Hi-C shortlist by default, `--all`

@@ -111,6 +111,30 @@ pore-c-aqb junctions aligned.ns.bam ref.fa --enzymes DpnII,NlaIII,HindIII
 
 ---
 
+## Knowing where it is
+
+A full library takes tens of minutes to digest and a 24 GB BAM a couple to
+merge. Silence for that long is indistinguishable from a hang, so every long
+command draws a bar on stderr:
+
+```
+digesting  [#########...............]  38%  1,504,220 reads  1,240/s  elapsed 12:07  eta 19:44
+merging    [################........]  67%  139,204 concatemers  7,130/s  elapsed 0:19  eta 0:09
+```
+
+The percentage is **real**, not guessed. A BAM is BGZF-compressed and
+`AlignmentFile.tell()` gives the position in the compressed file, so the
+fraction of bytes consumed is a genuine measure of progress, and the ETA
+follows from it. Reading from a pipe has no size to measure against, so the bar
+falls back to a count and a rate rather than inventing a total.
+
+It draws **only when stderr is a terminal**, so redirecting to a file or a
+Nextflow log stays clean. `--progress` forces it on, `--no-progress` off.
+`--quiet` does *not* silence it: that flag controls logging, and a bar is not a
+log line.
+
+---
+
 ## Fix 1 — several enzymes in one digest
 
 A concatemer is digested **once**, by every enzyme in the tube at the same
@@ -376,10 +400,17 @@ MAPQ filter is moved before the merge.
 `tests/test_robustness.py` feeds the commands empty BAMs, non-BAM files,
 missing paths, unmapped-only reads, lowercase and `N`-containing sequences,
 1-base reads, BAMs from other tools with no `Xc` tag, coordinate-sorted BAMs,
-and extreme parameter values.
+and extreme parameter values. Exit codes follow the convention: 0 success,
+1 runtime error, 2 usage error.
+
+**5. The progress bar never corrupts anything.**
+
+`tests/test_progress.py` checks it is silent off a terminal, wiped on close and
+on exception, redrawn at most a few times per burst, truncated rather than
+wrapped, and that it reports no percentage when it cannot know one.
 
 ```
-228 tests | 95% coverage | biopython 1.82 and 1.88 | flake8 clean
+263 tests | 96% coverage | biopython 1.82 and 1.88 | flake8 clean
 ```
 
 ### A reproducibility bug found along the way

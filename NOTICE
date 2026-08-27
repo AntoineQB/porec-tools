@@ -89,9 +89,14 @@ Changes made
    `pore-c-aqb enzymes` lists and searches the enzymes the digest accepts.
    Not derived from upstream code.
 
-10. Provenance
+10. Progress reporting  [src/pore_c_aqb/progress.py, new]
+    A dependency-free progress bar for the long-running commands. Percentage
+    and ETA come from the BGZF virtual offset of the input BAM. Not derived
+    from upstream code.
+
+11. Provenance
    A @PG line recording the tool, version, command line and enzyme list is
    added to the output BAM header.
 
-11. Command-line interface  [src/pore_c_aqb/cli.py, new]
+12. Command-line interface  [src/pore_c_aqb/cli.py, new]
    Argument-compatible with `pore-c-py digest`; adds --stats and --dry-run.

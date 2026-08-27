@@ -42,6 +42,11 @@ import pysam
 
 from pore_c_aqb import __version__
 from pore_c_aqb.enzymes import EnzymeSpecError, resolve_enzymes
+from pore_c_aqb.progress import (  # noqa: F401
+    Progress,
+    add_progress_arguments,
+    progress_enabled,
+)
 from pore_c_aqb.reads import iter_concatemers, read_order_key  # noqa: F401
 from pore_c_aqb.sites import site_regex
 
@@ -104,6 +109,7 @@ def main(argv=None) -> int:
                    help="Stop after this many boundaries (0 = all).")
     p.add_argument("--seed", type=int, default=0,
                    help="Seed for the random background.")
+    add_progress_arguments(p)
     args = p.parse_args(argv)
 
     try:
@@ -124,10 +130,14 @@ def main(argv=None) -> int:
     hits = {e.name: 0 for e in enzymes}
     bg = {e.name: 0 for e in enzymes}
     n = 0
+    bar = Progress("scanning junctions", unit="boundaries",
+                   total=args.max_junctions or None,
+                   enabled=progress_enabled(args))
     for chrom, pos in junction_boundaries(args.bam, args.mapq, args.min_jump):
         if pos is None or chrom not in lengths:
             continue
         n += 1
+        bar.update()
         # background: a random position on the same chromosome, so that base
         # composition and the chromosome mix match the junctions exactly
         rpos = rng.randrange(1000, max(1001, lengths[chrom] - 1000))
@@ -138,6 +148,7 @@ def main(argv=None) -> int:
                 bg[e.name] += 1
         if args.max_junctions and n >= args.max_junctions:
             break
+    bar.close()
 
     if not n:
         print("No ligation junction found. Is the BAM name-sorted, aligned, "

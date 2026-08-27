@@ -241,3 +241,19 @@ def test_stdin_works_with_the_workflow_argument_order(tmp_path, concatemers):
     assert proc.returncode == 0, proc.stderr.decode()[-800:]
     with pysam.AlignmentFile(str(out), check_sq=False) as f:
         assert sum(1 for _ in f) > 0
+
+
+def test_bare_command_shows_what_the_tool_is_for(capsys):
+    """Typing the name alone is asking "what is this?", not "remind me of the
+    usage line". Print the full help."""
+    assert main([]) == 1
+    out = capsys.readouterr().out
+    assert "digest" in out and "merge" in out and "junctions" in out
+    assert "undoes the cuts" in out
+
+
+def test_stdin_without_header_fails_before_any_progress_output(capsys):
+    """The error must come first, not after a table implying work started."""
+    with pytest.raises(SystemExit, match="requires --header"):
+        main(["digest", "DpnII", "-", "--output", "-"])
+    assert "GATC" not in capsys.readouterr().err

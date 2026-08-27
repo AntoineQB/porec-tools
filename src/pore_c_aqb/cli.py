@@ -25,6 +25,7 @@ from pore_c_aqb.enzymes import (
     describe_enzymes,
     resolve_enzymes,
 )
+from pore_c_aqb.progress import add_progress_arguments, bam_progress
 from pore_c_aqb.report import (
     describe_cut,
     describe_overhang,
@@ -158,6 +159,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Minimal logging; warnings only.")
     d.add_argument("--logfile", type=Path, default=None,
                    help="Write logs to this file as well as stderr.")
+    add_progress_arguments(d)
     return parser
 
 
@@ -285,19 +287,22 @@ def run_digest(args) -> int:
         return 0
 
     inputs = resolve_inputs(inputs, args.glob, args.recursive)
-    logger.info("Digesting with %s", describe_enzymes(enzymes))
-    for line in enzyme_table(enzymes):
-        logger.info("%s", line)
 
     stats = DigestStats()
     mode = "wb" if args.output != "-" else "wb0"
     remaining = args.max_reads
 
     with contextlib.ExitStack() as stack:
-        # stdin can only be opened once: read the header from this very handle
-        # and keep it open, rather than reopening the stream later
+        # open the input before saying anything: a missing file or a stdin
+        # without --header should fail immediately, not after a table that
+        # implies the run has started. stdin can only be opened once, so the
+        # header comes from this very handle rather than a second open.
         first = stack.enter_context(_open_input(inputs[0], args.header))
         header = _output_header(first, args.header, enzymes)
+
+        logger.info("Digesting with %s", describe_enzymes(enzymes))
+        for line in enzyme_table(enzymes):
+            logger.info("%s", line)
 
         out = stack.enter_context(pysam.AlignmentFile(
             args.output, mode, header=header, threads=max(1, args.threads)))
@@ -319,11 +324,18 @@ def run_digest(args) -> int:
             infile = first if index == 0 else stack.enter_context(
                 _open_input(path, args.header))
             before = stats.n_concatemers
+            bar = stack.enter_context(bam_progress(
+                "digesting", path, infile, args, unit="reads"))
+            seen = 0
             for read in get_concatemer_seqs(
                     infile, enzymes, remove_tags=args.remove_tags, stats=stats,
                     max_monomers=args.max_monomers, on_excluded=on_excluded,
                     max_reads=remaining):
                 out.write(read)
+                if stats.n_concatemers != seen:
+                    seen = stats.n_concatemers
+                    bar.update()
+            bar.close()
             if remaining is not None:
                 remaining -= stats.n_concatemers - before
 
@@ -347,6 +359,11 @@ def main(argv: list[str] | None = None) -> int:
         return junctions_main(argv[1:])
 
     parser = _build_parser()
+    if not argv:
+        # bare "pore-c-aqb": show what the tool is for, not just a usage line.
+        # Someone typing the name alone is asking "what is this?"
+        parser.print_help()
+        return 1
     args = parser.parse_args(argv)
     _setup_logging(getattr(args, "log_level", logging.INFO),
                    getattr(args, "logfile", None))

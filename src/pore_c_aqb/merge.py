@@ -55,8 +55,10 @@ one of its monomers passed, so each block carries the highest MAPQ it contained.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import gzip
 import json
+import os
 import sys
 from collections import Counter
 from dataclasses import dataclass
@@ -64,6 +66,11 @@ from itertools import combinations
 from pathlib import Path
 
 from pore_c_aqb import __version__
+from pore_c_aqb.progress import (
+    Progress,
+    add_progress_arguments,
+    progress_enabled,
+)
 from pore_c_aqb.reads import iter_concatemers, read_span
 
 __all__ = ["Fragment", "merge_adjacent", "fragments_of", "MergeStats", "main"]
@@ -194,6 +201,7 @@ class MergeStats:
         collapse = (self.n_monomers / self.n_fragments
                     if self.n_fragments else 0.0)
         return {
+            "tool": f"pore-c-aqb {__version__} merge",
             "concatemers": self.n_concatemers,
             "aligned_monomers": self.n_monomers,
             "fragments_after_merge": self.n_fragments,
@@ -274,6 +282,7 @@ def run(args) -> int:
     chrom_sizes = _chrom_sizes(args.sizes) if args.sizes else {}
     chrom_order = {c: i for i, c in enumerate(chrom_sizes)}
 
+    stack = contextlib.ExitStack()
     try:
         frag_fh.write("\t".join(FRAGMENT_COLUMNS) + "\n")
         if args.pairs:
@@ -287,8 +296,15 @@ def run(args) -> int:
             pairs_fh.write(
                 "#columns: readID chr1 pos1 chr2 pos2 strand1 strand2\n")
 
-        for read_id, alignments in iter_concatemers(args.bam):
+        size = os.path.getsize(args.bam) if os.path.exists(args.bam) else None
+        holder = {}
+        bar = stack.enter_context(Progress(
+            "merging", unit="concatemers",
+            position=(lambda: holder["tell"]() >> 16) if size else None,
+            size=size, enabled=progress_enabled(args)))
+        for read_id, alignments in iter_concatemers(args.bam, tell=holder):
             stats.n_concatemers += 1
+            bar.update()
             if not alignments:
                 continue
             frags = fragments_of(alignments)
@@ -319,12 +335,21 @@ def run(args) -> int:
                 stats.n_pairs += _write_pairs(
                     pairs_fh, read_id, frags, chrom_order, args.min_sep)
     finally:
+        stack.close()
         if frag_close:
             frag_fh.close()
         if pairs_close:
             pairs_fh.close()
 
     summary = stats.as_dict()
+    summary["parameters"] = {
+        "input": str(args.bam),
+        "merge_gap": args.merge_gap,
+        "mapq": args.mapq,
+        "min_fragments": args.min_fragments,
+        "min_length": args.min_length,
+        "min_sep": args.min_sep,
+    }
     if args.stats:
         Path(args.stats).write_text(json.dumps(summary, indent=2) + "\n")
     _report(summary, args)
@@ -347,6 +372,8 @@ def _write_pairs(fh, read_id, frags, chrom_order, min_sep) -> int:
 
 
 def _report(summary: dict, args) -> None:
+    if getattr(args, "quiet", False):
+        return
     say = print if args.output not in (None, "-") else \
         (lambda *a, **k: print(*a, file=sys.stderr, **k))
     say(f"Read {summary['concatemers']:,} concatemers, "
@@ -470,6 +497,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--stats", default=None, metavar="PATH",
         help="Write the summary as JSON.")
+    p.add_argument(
+        "--quiet", action="store_true",
+        help="Print nothing but errors (the summary still goes to --stats).")
+    add_progress_arguments(p)
     return p
 
 

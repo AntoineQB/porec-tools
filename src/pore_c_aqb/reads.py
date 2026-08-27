@@ -72,11 +72,15 @@ def open_bam(path: str):
             f"Is it really a BAM? 'samtools quickcheck' will tell you.")
 
 
-def iter_concatemers(bam_path: str, require_sorted: bool = True):
+def iter_concatemers(bam_path: str, require_sorted: bool = True,
+                     tell: dict | None = None):
     """Yield ``(concatemer_id, [alignments])``, monomers in read order.
 
     The BAM must be grouped by read name, which is what the workflow produces
     (``*.ns.bam``). Unmapped, secondary and supplementary records are dropped.
+
+    Pass a dict as ``tell`` to receive the file handle's ``tell`` method under
+    that key, so a progress bar can report real progress through the file.
 
     **No MAPQ filter happens here, deliberately.** Merging contiguous fragments
     has to run on the complete chain: removing a middle monomer first would
@@ -85,6 +89,9 @@ def iter_concatemers(bam_path: str, require_sorted: bool = True):
     """
     bam = open_bam(bam_path)
     warned_unknown = False
+    if tell is not None:
+        # let a caller watch how far into the file we are, for a progress bar
+        tell["tell"] = bam.tell
     try:
         if require_sorted:
             hd = bam.header.to_dict().get("HD", {})
